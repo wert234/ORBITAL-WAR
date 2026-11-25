@@ -66,7 +66,11 @@ function openResult(payload) {
 
 function wireMenus() {
   document.getElementById('open-network').addEventListener('click', () => { audio.play('click'); showScreen('network-screen'); });
-  document.getElementById('open-bot').addEventListener('click', () => { audio.play('click'); showToast('СКОРО'); });
+  document.getElementById('open-bot').addEventListener('click', () => {
+    audio.play('click');
+    if (!network.isConnected()) return showToast('Нет соединения с игровым сервером.', 'error');
+    if (network.createBotGame()) showToast('Подготавливаем бой с ботом…');
+  });
   document.getElementById('open-settings').addEventListener('click', () => { audio.play('click'); showScreen('settings-screen'); });
   document.getElementById('network-back').addEventListener('click', () => showScreen('home-screen'));
   document.getElementById('join-back').addEventListener('click', () => showScreen('network-screen'));
@@ -136,6 +140,7 @@ function wireNetworkEvents() {
   network.on('connection:error', () => updateNetworkStatus(false));
 
   network.on('room:created', payload => {
+    if (payload.mode === 'bot') return;
     document.getElementById('room-code').textContent = payload.code;
     document.getElementById('waiting-text').textContent = 'Ожидаем второго игрока…';
     showScreen('waiting-screen');
@@ -170,9 +175,11 @@ function wireNetworkEvents() {
       ? 'Новый матч запускается…'
       : 'Готовы к повторной игре: ' + payload.ready + ' / 2';
   });
-  network.on('match:started', () => {
+  network.on('match:started', payload => {
     openGame();
-    showToast('Матч начался. Уничтожь базу противника.');
+    showToast(payload?.opponentType === 'bot'
+      ? 'Бой с ботом начался. Проверь свою стратегию!'
+      : 'Матч начался. Уничтожь базу противника.');
   });
   network.on('game:state', state => {
     if (!game) return;

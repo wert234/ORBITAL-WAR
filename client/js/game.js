@@ -117,7 +117,9 @@ export class GameUI {
     document.getElementById('energy-value').textContent = Math.floor(base.energy);
     document.getElementById('level-value').textContent = base.level;
     document.getElementById('generation-value').textContent = `+${base.generation} ЭНЕРГИИ/С`;
-    document.getElementById('match-status').textContent = this.state.opponentConnected ? 'БОЙ' : 'СВЯЗЬ';
+    document.getElementById('match-status').textContent = this.state.opponentIsBot ? 'БОТ' : (this.state.opponentConnected ? 'БОЙ' : 'СВЯЗЬ');
+    const opponentLabel = document.getElementById('opponent-label');
+    if (opponentLabel) opponentLabel.textContent = this.state.opponentIsBot ? 'БОТ' : 'ВРАГ';
 
     const productionLabel = document.getElementById('production-state');
     const productionQueue = base.productionQueue || (base.production ? [base.production] : []);
@@ -160,7 +162,7 @@ export class GameUI {
     document.getElementById('opponent-alert').classList.toggle('hidden', connected);
     if (this.state) {
       this.state.opponentConnected = connected;
-      document.getElementById('match-status').textContent = connected ? 'БОЙ' : 'СВЯЗЬ';
+      document.getElementById('match-status').textContent = this.state.opponentIsBot ? 'БОТ' : (connected ? 'БОЙ' : 'СВЯЗЬ');
     }
   }
 

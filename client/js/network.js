@@ -93,6 +93,14 @@ export class NetworkClient {
     return true;
   }
 
+  createBotGame() {
+    if (!this.isConnected()) return false;
+    this.clearSession();
+    this.pendingToken = makeToken();
+    this.socket.emit('room:createBot', { token: this.pendingToken });
+    return true;
+  }
+
   joinRoom(code) {
     if (!this.isConnected()) return false;
     const normalizedCode = String(code).replace(/\D/g, '').slice(0, 5);
