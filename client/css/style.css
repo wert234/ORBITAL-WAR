@@ -79,12 +79,16 @@ button:active { transform: scale(.985); }
 
 /* Match screen */
 .game-screen { flex-direction: column; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); background: radial-gradient(ellipse at 50% 45%, rgba(24, 35, 85, .24), transparent 55%); }
-.game-topbar { height: 58px; flex: 0 0 58px; display: grid; grid-template-columns: .82fr 1.25fr .9fr .44fr; align-items: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid rgba(100, 157, 255, .2); background: rgba(5, 10, 27, .94); z-index: 2; }
-.match-state { color: #7e9bc8; font-size: 9px; letter-spacing: .12em; font-weight: 850; white-space: nowrap; }
+.game-topbar { height: 62px; flex: 0 0 62px; display: grid; grid-template-columns: minmax(32px, .58fr) minmax(58px, 1fr) 16px minmax(58px, 1fr) minmax(43px, .72fr) 22px; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid rgba(100, 157, 255, .2); background: rgba(5, 10, 27, .94); z-index: 2; }
+.match-state { color: #7e9bc8; font-size: 8px; letter-spacing: .08em; font-weight: 850; white-space: nowrap; }
 .live-light { width: 6px; height: 6px; background: var(--cyan); box-shadow: 0 0 9px var(--cyan); }
 .base-health-block { min-width: 0; }
-.top-metric { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 9px; color: #8da1c9; letter-spacing: .1em; }
-.top-metric strong { color: #f2f7ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hp-divider { color: #a4b5dc; font-size: 8px; font-weight: 900; letter-spacing: .05em; text-align: center; text-shadow: 0 0 9px rgba(130,170,255,.55); }
+.enemy-health-block .top-metric span { color: #d28ba9; }
+.enemy-health-block .meter { direction: rtl; }
+.enemy-health-block .meter span { background: linear-gradient(90deg, #ff789b, #ffb078); box-shadow: 0 0 8px rgba(255,120,155,.5); }
+.top-metric { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 8px; color: #8da1c9; letter-spacing: .07em; gap: 3px; }
+.top-metric strong { color: #f2f7ff; font-size: 10px; font-variant-numeric: tabular-nums; }
 .meter { height: 5px; border-radius: 99px; background: #242b4d; overflow: hidden; }
 .meter span { display: block; height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #42e5bb, #54bcff); box-shadow: 0 0 8px rgba(85,228,255,.55); transition: width .2s; }
 .energy-block { display: grid; grid-template-columns: 14px auto; grid-template-rows: 16px 11px; align-items: center; column-gap: 3px; justify-content: center; }
@@ -155,7 +159,7 @@ button:active { transform: scale(.985); }
   .brand-orbit span { width: 20px; height: 20px; left: 22px; top: 22px; }
   .brand-orbit::after { left: 7px; top: 11px; }
   .menu-footer { margin-top: 24px; }
-  .game-topbar { height: 52px; flex-basis: 52px; }
+  .game-topbar { height: 58px; flex-basis: 58px; gap: 4px; padding-left: 6px; padding-right: 6px; }
   .command-panel { min-height: 164px; }
   .ship-button { height: 62px; }
 }
