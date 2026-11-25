@@ -126,6 +126,7 @@ class GameManager {
   createPlayerView(game, playerIndex) {
     const state = game.state;
     const ownBase = state.bases[playerIndex];
+    const opposingBase = state.bases[1 - playerIndex];
     const enemyPlayer = game.room.players[1 - playerIndex];
     const transformEntity = (entity) => ({ ...entity, y: transformY(playerIndex, entity.y) });
     const transformEffect = (effect) => ({ ...effect, y: transformY(playerIndex, effect.y) });
@@ -142,6 +143,10 @@ class GameManager {
       tick: state.tick,
       serverTime: Date.now(),
       opponentConnected: Boolean(enemyPlayer && enemyPlayer.connected),
+      // Only opponent HP is exposed for the duel HUD; no enemy base entity,
+      // position, level, modules, slots, production, or resources are sent.
+      opponentBaseHp: opposingBase.hp,
+      opponentBaseMaxHp: opposingBase.maxHp,
       base: {
         hp: ownBase.hp,
         maxHp: ownBase.maxHp,
@@ -150,7 +155,7 @@ class GameManager {
         level: ownBase.level,
         slotCount: require('./gameLogic').moduleSlotCount(ownBase.level),
         modules: ownBase.modules.map(module => ({ slotId: module.slotId, type: module.type })),
-        production: ownBase.production ? { ...ownBase.production } : null,
+        productionQueue: (ownBase.productionQueue || []).map(item => ({ ...item })),
         generation: CONFIG.economy.baseGenerationPerSecond + ownBase.modules.filter(module => module.type === 'reactor').length * CONFIG.economy.reactorBonusPerSecond
       },
       ships: state.ships.map(ship => ({

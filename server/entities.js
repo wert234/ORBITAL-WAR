@@ -10,7 +10,7 @@ function makeBase(playerIndex) {
     level: 1,
     energy: CONFIG.economy.startingEnergy,
     modules: [],
-    production: null,
+    productionQueue: [],
     // A built-in hangar makes ship production available from the beginning.
     // A purchased hangar module later shortens build time.
     nextProductionId: 1

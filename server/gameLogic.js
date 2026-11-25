@@ -51,8 +51,10 @@ function damageShip(state, target, amount, sourceX, sourceY) {
 }
 
 function updateProduction(state, base, owner, dtMs) {
-  const production = base.production;
-  if (!production) return;
+  const queue = base.productionQueue || (base.production ? [base.production] : []);
+  if (!queue.length) return;
+
+  const production = queue[0];
   production.remainingMs = Math.max(0, production.remainingMs - dtMs);
   if (production.remainingMs > 0) return;
 
@@ -63,7 +65,9 @@ function updateProduction(state, base, owner, dtMs) {
   }
 
   state.ships.push(makeShip(state, owner, production.type));
-  pushEffect(state, 'launch', 0.5, owner === 0 ? 0.725 : 0.275, 420);
+  pushEffect(state, 'launch', 0.5, owner === 0 ? 0.725 : 0.275, 520);
+  queue.shift();
+  base.productionQueue = queue;
   base.production = null;
 }
 
@@ -86,6 +90,7 @@ function updateBaseWeapons(state, base, owner, dt) {
     if (!target) continue;
 
     installed.cooldownRemaining = spec.cooldown;
+    pushEffect(state, 'muzzle', origin.x, origin.y, 190);
     if (installed.type === 'ballistic') {
       state.projectiles.push({
         id: `pr-${state.nextEntityId++}`,
@@ -131,24 +136,15 @@ function updateProjectiles(state, dt) {
 
 function updateShips(state, dt) {
   for (const ship of state.ships) {
-    if (ship.hp <= 0) continue;
+    if (ship.hp <= 0 || ship.delivered) continue;
     const spec = CONFIG.ships[ship.type];
     ship.attackCooldown = Math.max(0, ship.attackCooldown - dt);
-    ship.baseCooldown = Math.max(0, ship.baseCooldown - dt);
 
     const enemies = getEnemyShips(state, ship.owner);
-    let target = null;
-    if (enemies.length && ship.type === 'interceptor') {
-      target = enemies
-        .map(enemy => ({ enemy, d: distance(ship, enemy) }))
-        .filter(item => item.d <= spec.shipRange)
-        .sort((a, b) => a.d - b.d)[0]?.enemy || null;
-    } else if (enemies.length) {
-      target = enemies
-        .map(enemy => ({ enemy, d: distance(ship, enemy) }))
-        .filter(item => item.d <= spec.shipRange)
-        .sort((a, b) => a.d - b.d)[0]?.enemy || null;
-    }
+    const target = enemies
+      .map(enemy => ({ enemy, d: distance(ship, enemy) }))
+      .filter(item => item.d <= spec.shipRange)
+      .sort((a, b) => a.d - b.d)[0]?.enemy || null;
 
     if (target) {
       ship.targetId = target.id;
@@ -156,27 +152,23 @@ function updateShips(state, dt) {
         damageShip(state, target, spec.shipDamage, ship.x, ship.y);
         ship.attackCooldown = spec.shipCooldown;
       }
-      // A ship stops to engage its target. This prevents units from passing
-      // through each other without a combat-resolution step.
+      // Ships engage nearby enemies, then resume their outbound flight.
       continue;
     }
     ship.targetId = null;
 
-    const enemyBaseY = ship.owner === 0 ? 0.145 : 0.855;
-    const baseDistance = Math.abs(ship.y - enemyBaseY);
-    if (baseDistance <= spec.baseAttackRange) {
-      ship.y = enemyBaseY + (ship.owner === 0 ? 1 : -1) * spec.baseAttackRange * 0.72;
-      const enemyBase = state.bases[1 - ship.owner];
-      if (ship.baseCooldown <= 0) {
-        enemyBase.hp = Math.max(0, enemyBase.hp - spec.baseDamage);
-        ship.baseCooldown = spec.baseCooldown;
-        pushEffect(state, 'base-hit', 0.5, enemyBaseY, 420);
-      }
-      continue;
-    }
-
     ship.y += ship.direction * spec.speed * dt;
     ship.x = clamp(ship.x, 0.12, 0.88);
+
+    // There is no rendered enemy station. A ship scores its base hit only
+    // after it flies completely beyond the far edge of the arena.
+    const crossedFarEdge = ship.owner === 0 ? ship.y <= -0.015 : ship.y >= 1.015;
+    if (crossedFarEdge) {
+      const enemyBase = state.bases[1 - ship.owner];
+      enemyBase.hp = Math.max(0, enemyBase.hp - spec.baseDamage);
+      pushEffect(state, 'base-hit', 0.5, ship.owner === 0 ? 0 : 1, 520);
+      ship.delivered = true;
+    }
   }
 }
 
@@ -221,21 +213,31 @@ function applyCommand(state, playerIndex, command) {
     const type = String(data.shipType || '');
     const spec = CONFIG.ships[type];
     if (!spec) return fail('UNKNOWN_SHIP', 'Неизвестный тип корабля.');
-    if (base.production) return fail('HANGAR_BUSY', 'Ангар уже занят производством.');
-    if (aliveShipCount(state, playerIndex) >= CONFIG.MAX_SHIPS_PER_PLAYER) return fail('FLEET_LIMIT', 'Достигнут лимит кораблей.');
+    const queue = base.productionQueue || (base.production ? [base.production] : []);
+    if (queue.length >= CONFIG.MAX_PRODUCTION_QUEUE) {
+      return fail('PRODUCTION_QUEUE_FULL', `Очередь заполнена: максимум ${CONFIG.MAX_PRODUCTION_QUEUE} кораблей.`);
+    }
+    if (aliveShipCount(state, playerIndex) + queue.length >= CONFIG.MAX_SHIPS_PER_PLAYER) {
+      return fail('FLEET_LIMIT', 'Достигнут лимит кораблей с учётом очереди производства.');
+    }
     if (base.energy < spec.cost) return fail('NOT_ENOUGH_ENERGY', 'Недостаточно энергии.');
     base.energy -= spec.cost;
     const hangarModules = base.modules.filter(item => item.type === 'hangar').length;
     const multiplier = Math.max(0.55, Math.pow(CONFIG.modules.hangar.buildTimeMultiplier, hangarModules));
     const totalMs = Math.round(spec.buildMs * multiplier);
-    base.production = {
+    queue.push({
       id: base.nextProductionId++,
       type,
       remainingMs: totalMs,
       totalMs,
       waitingForCapacity: false
+    });
+    base.productionQueue = queue;
+    base.production = null;
+    return {
+      ok: true,
+      message: queue.length === 1 ? `Начато производство: ${spec.name}.` : `${spec.name} добавлен в очередь (${queue.length}/${CONFIG.MAX_PRODUCTION_QUEUE}).`
     };
-    return { ok: true, message: `Начато производство: ${spec.name}.` };
   }
 
   return fail('UNKNOWN_ACTION', 'Неизвестное действие.');
@@ -258,7 +260,7 @@ function stepGame(state, dt) {
   updateShips(state, dt);
   updateProjectiles(state, dt);
 
-  state.ships = state.ships.filter(ship => ship.hp > 0 && ship.y >= -0.04 && ship.y <= 1.04);
+  state.ships = state.ships.filter(ship => ship.hp > 0 && !ship.delivered && ship.y >= -0.04 && ship.y <= 1.04);
   state.effects = state.effects.filter(effect => {
     effect.age += dtMs;
     return effect.age < effect.duration;

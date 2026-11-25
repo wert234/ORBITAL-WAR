@@ -15,12 +15,15 @@ const CLIENT_DIR = path.join(__dirname, '..', 'client');
 const app = express();
 app.disable('x-powered-by');
 app.get('/health', (_req, res) => res.json({ ok: true, name: 'ORBITAL WAR', time: new Date().toISOString() }));
-app.get('/api/config', (_req, res) => res.json({ economy: CONFIG.economy, base: CONFIG.base, modules: CONFIG.modules, ships: CONFIG.ships }));
+app.get('/api/config', (_req, res) => res.json({ economy: CONFIG.economy, base: CONFIG.base, modules: CONFIG.modules, ships: CONFIG.ships, productionQueueLimit: CONFIG.MAX_PRODUCTION_QUEUE }));
 app.use(express.static(CLIENT_DIR, {
   extensions: ['html'],
-  maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0
+  maxAge: 0,
+  setHeaders: response => response.setHeader('Cache-Control', 'no-cache')
 }));
-app.get('*', (_req, res) => res.sendFile(path.join(CLIENT_DIR, 'index.html')));
+app.get('*', (_req, res) => res.sendFile(path.join(CLIENT_DIR, 'index.html'), {
+  headers: { 'Cache-Control': 'no-cache' }
+}));
 
 const server = http.createServer(app);
 const allowedOrigins = process.env.CORS_ORIGIN

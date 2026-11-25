@@ -8,6 +8,7 @@ module.exports = Object.freeze({
   RECONNECT_GRACE_MS: 30_000,
   ROOM_IDLE_MS: 10 * 60_000,
   MAX_SHIPS_PER_PLAYER: 30,
+  MAX_PRODUCTION_QUEUE: 5,
   MAX_COMMANDS_PER_SECOND: 10,
   MAX_COMMAND_CACHE: 300,
 
@@ -37,8 +38,8 @@ module.exports = Object.freeze({
       category: 'weapon',
       cost: 100,
       range: 0.52,
-      cooldown: 1.15,
-      damage: 25,
+      cooldown: 1.8,
+      damage: 12,
       projectileSpeed: 1.55
     },
     laser: {
@@ -46,8 +47,8 @@ module.exports = Object.freeze({
       category: 'weapon',
       cost: 150,
       range: 0.66,
-      cooldown: 1.55,
-      damage: 38
+      cooldown: 2.4,
+      damage: 18
     },
     reactor: {
       name: 'Энергогенератор',
