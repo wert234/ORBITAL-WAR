@@ -3,6 +3,7 @@
 const CONFIG = require('./config');
 const { makeGameState } = require('./entities');
 const { applyCommand, stepGame, moduleSlotCount } = require('./gameLogic');
+const { runBotAI } = require('./botAI');
 
 function transformY(playerIndex, y) {
   return playerIndex === 0 ? y : 1 - y;
@@ -26,10 +27,20 @@ class GameManager {
       player.rematch = false;
       if (player.socketId) {
         const socket = this.io.sockets.sockets.get(player.socketId);
-        if (socket) socket.emit('match:started', { code: room.code, playerIndex });
+        if (socket) socket.emit('match:started', {
+          code: room.code,
+          playerIndex,
+          opponentType: room.isBotMatch ? 'bot' : 'human'
+        });
       }
     });
-    this.games.set(room.code, { room, state, commandCaches: [new Map(), new Map()], commandTimes: [[], []] });
+    this.games.set(room.code, {
+      room,
+      state,
+      commandCaches: [new Map(), new Map()],
+      commandTimes: [[], []],
+      botAI: room.isBotMatch ? { nextThinkAt: Date.now() + 500, decisions: 0, shipOrders: 0 } : null
+    });
     this.broadcastRoom(room.code, true);
   }
 
@@ -100,6 +111,7 @@ class GameManager {
     this.lastStepAt = now;
     for (const [code, game] of this.games) {
       if (game.state.status === 'active') {
+        if (game.botAI) runBotAI(game, now);
         stepGame(game.state, dt);
         if (game.state.status === 'ended') {
           this.notifyEnd(game, 'base-destroyed');
@@ -142,7 +154,8 @@ class GameManager {
       status: state.status,
       tick: state.tick,
       serverTime: Date.now(),
-      opponentConnected: Boolean(enemyPlayer && enemyPlayer.connected),
+      opponentConnected: Boolean(enemyPlayer && (enemyPlayer.isBot || enemyPlayer.connected)),
+      opponentIsBot: Boolean(enemyPlayer && enemyPlayer.isBot),
       // Only opponent HP is exposed for the duel HUD; no enemy base entity,
       // position, level, modules, slots, production, or resources are sent.
       opponentBaseHp: opposingBase.hp,

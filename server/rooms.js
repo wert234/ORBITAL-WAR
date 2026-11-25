@@ -24,6 +24,7 @@ class RoomManager {
 
   bindSocket(socket) {
     socket.on('room:create', payload => this.createRoom(socket, payload));
+    socket.on('room:createBot', payload => this.createBotRoom(socket, payload));
     socket.on('room:join', payload => this.joinRoom(socket, payload));
     socket.on('room:cancel', () => this.cancelRoom(socket));
     socket.on('room:leave', () => this.leaveRoom(socket));
@@ -53,6 +54,33 @@ class RoomManager {
     socket.data.roomCode = code;
     socket.data.playerIndex = 0;
     socket.emit('room:created', { code, token, playerIndex: 0 });
+  }
+
+
+  createBotRoom(socket, payload) {
+    const token = payload?.token;
+    if (!isValidToken(token)) return this.emitError(socket, 'BAD_TOKEN', 'Не удалось создать защищённую сессию. Обновите страницу.');
+    if (socket.data.roomCode) this.detachSocket(socket);
+
+    const code = this.createCode();
+    const botToken = `bot-${code}-${Date.now()}`;
+    const room = {
+      code,
+      status: 'active',
+      isBotMatch: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      players: [
+        this.makePlayer(0, token, socket.id),
+        { ...this.makePlayer(1, botToken, null), isBot: true }
+      ],
+      game: null
+    };
+    this.rooms.set(code, room);
+    socket.data.roomCode = code;
+    socket.data.playerIndex = 0;
+    socket.emit('room:created', { code, token, playerIndex: 0, mode: 'bot' });
+    this.gameManager.startRoom(room);
   }
 
   makePlayer(playerIndex, token, socketId) {
@@ -107,7 +135,12 @@ class RoomManager {
         room.status = 'active';
         this.gameManager.startRoom(room);
       } else if (room.status === 'active') {
-        socket.emit('match:started', { code: room.code, playerIndex: existing.playerIndex, resumed: true });
+        socket.emit('match:started', {
+          code: room.code,
+          playerIndex: existing.playerIndex,
+          resumed: true,
+          opponentType: room.isBotMatch ? 'bot' : 'human'
+        });
         this.gameManager.broadcastRoom(room.code, true);
       } else if (room.status === 'ended' && room.game) {
         socket.emit('match:ended', {
@@ -169,7 +202,7 @@ class RoomManager {
     const session = this.getSession(socket);
     if (!session) return;
     const { room, playerIndex } = session;
-    if (room.status === 'waiting' || room.status === 'ended') {
+    if (room.status === 'waiting' || room.status === 'ended' || room.isBotMatch) {
       this.closeRoom(room, 'Игрок покинул комнату.');
       return;
     }
@@ -186,6 +219,12 @@ class RoomManager {
     const { room, playerIndex } = session;
     session.player.rematch = true;
     room.updatedAt = Date.now();
+    if (room.isBotMatch) {
+      const botPlayer = room.players[1];
+      if (botPlayer) botPlayer.rematch = true;
+      this.gameManager.startRoom(room);
+      return;
+    }
     room.players.forEach(player => {
       if (!player?.connected || !player.socketId) return;
       const target = this.io.sockets.sockets.get(player.socketId);
