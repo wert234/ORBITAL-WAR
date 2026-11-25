@@ -107,27 +107,39 @@ export class GameUI {
     const base = this.state?.base;
     if (!base) return;
     const hpRatio = Math.max(0, Math.min(1, base.hp / base.maxHp));
+    const opponentMaxHp = this.state.opponentBaseMaxHp || this.config?.base?.maxHealth || 1000;
+    const opponentHp = Math.max(0, this.state.opponentBaseHp ?? opponentMaxHp);
+    const opponentRatio = Math.max(0, Math.min(1, opponentHp / opponentMaxHp));
     document.getElementById('hp-value').textContent = Math.ceil(base.hp);
     document.getElementById('hp-fill').style.width = `${hpRatio * 100}%`;
+    document.getElementById('opponent-hp-value').textContent = Math.ceil(opponentHp);
+    document.getElementById('opponent-hp-fill').style.width = `${opponentRatio * 100}%`;
     document.getElementById('energy-value').textContent = Math.floor(base.energy);
     document.getElementById('level-value').textContent = base.level;
     document.getElementById('generation-value').textContent = `+${base.generation} ЭНЕРГИИ/С`;
     document.getElementById('match-status').textContent = this.state.opponentConnected ? 'БОЙ' : 'СВЯЗЬ';
 
     const productionLabel = document.getElementById('production-state');
-    if (base.production) {
-      const shipName = this.config?.ships?.[base.production.type]?.name || base.production.type;
-      if (base.production.waitingForCapacity) productionLabel.textContent = 'ФЛОТ ЗАПОЛНЕН';
-      else productionLabel.textContent = `${shipName.toUpperCase()} · ${Math.ceil(base.production.remainingMs / 1000)}С`;
+    const productionQueue = base.productionQueue || (base.production ? [base.production] : []);
+    const queueLimit = this.config?.productionQueueLimit || 5;
+    const activeProduction = productionQueue[0];
+    if (activeProduction) {
+      const shipName = this.config?.ships?.[activeProduction.type]?.name || activeProduction.type;
+      if (activeProduction.waitingForCapacity) productionLabel.textContent = `ФЛОТ ЗАПОЛНЕН · ${productionQueue.length}/${queueLimit}`;
+      else {
+        const queuedCount = Math.max(0, productionQueue.length - 1);
+        productionLabel.textContent = `${shipName.toUpperCase()} · ${Math.ceil(activeProduction.remainingMs / 1000)}С${queuedCount ? ` · +${queuedCount}` : ''}`;
+      }
     } else {
       productionLabel.textContent = 'АНГАР ГОТОВ';
     }
 
     document.querySelectorAll('[data-ship]').forEach(button => {
       const spec = this.config?.ships?.[button.dataset.ship];
-      button.disabled = Boolean(base.production) || !spec || !this.network.isConnected();
-      button.classList.toggle('busy', Boolean(base.production));
+      button.disabled = productionQueue.length >= queueLimit || !spec || !this.network.isConnected();
+      button.classList.toggle('busy', productionQueue.length > 0);
       button.classList.toggle('unaffordable', Boolean(spec && base.energy < spec.cost));
+      button.title = productionQueue.length >= queueLimit ? 'Очередь производства заполнена' : '';
     });
 
     const upgrade = document.getElementById('upgrade-button');

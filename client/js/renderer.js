@@ -43,7 +43,7 @@ export class ArenaRenderer {
     this.previous = null;
     this.current = null;
     this.receivedAt = performance.now();
-    this.stars = Array.from({ length: 85 }, (_, index) => {
+    this.stars = Array.from({ length: 110 }, (_, index) => {
       const seed = (index * 9301 + 49297) % 233280;
       const seed2 = (index * 233 + 719) % 997;
       return {
@@ -54,6 +54,12 @@ export class ArenaRenderer {
         speed: 0.5 + (index % 5) * 0.22
       };
     });
+    this.spaceDust = Array.from({ length: 26 }, (_, index) => ({
+      x: ((index * 71 + 19) % 997) / 997,
+      y: ((index * 137 + 53) % 991) / 991,
+      speed: 0.35 + (index % 6) * 0.16,
+      length: 3 + (index % 4) * 2
+    }));
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
@@ -107,6 +113,7 @@ export class ArenaRenderer {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     this.drawBackground(ctx, w, h, now);
+    this.drawOutboundEdge(ctx, w, h, now);
     const state = this.current;
     if (!state) {
       this.drawBase(ctx, w, h, { hp: 1000, maxHp: 1000, level: 1, modules: [] }, true);
@@ -115,9 +122,9 @@ export class ArenaRenderer {
 
     this.drawBeams(ctx, w, h, this.getInterpolatedList('beams'));
     this.drawProjectiles(ctx, w, h, this.getInterpolatedList('projectiles'));
-    this.getInterpolatedList('ships').forEach(ship => this.drawShip(ctx, w, h, ship));
+    this.getInterpolatedList('ships').forEach(ship => this.drawShip(ctx, w, h, ship, now));
     this.drawEffects(ctx, w, h, state.effects || []);
-    this.drawBase(ctx, w, h, state.base, false);
+    this.drawBase(ctx, w, h, state.base, false, now);
   }
 
   drawBackground(ctx, w, h, now) {
@@ -135,12 +142,25 @@ export class ArenaRenderer {
     ctx.fillRect(0, 0, w, h);
 
     for (const star of this.stars) {
-      const twinkle = 0.45 + (Math.sin(now * 0.001 * star.speed + star.phase) + 1) * 0.22;
+      const twinkle = 0.38 + (Math.sin(now * 0.001 * star.speed + star.phase) + 1) * 0.25;
       ctx.globalAlpha = twinkle;
       ctx.fillStyle = star.r > 1 ? '#c6e5ff' : '#829bcf';
       ctx.beginPath();
       ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Slow parallax dust gives the arena depth without heavy image assets.
+    for (const particle of this.spaceDust) {
+      const y = ((particle.y + now * 0.000006 * particle.speed) % 1) * h;
+      const x = particle.x * w;
+      ctx.globalAlpha = 0.1 + particle.speed * 0.07;
+      ctx.strokeStyle = '#9bcfff';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + particle.length);
+      ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
@@ -167,16 +187,43 @@ export class ArenaRenderer {
     ctx.restore();
   }
 
-  drawBase(ctx, w, h, base, placeholder) {
+  drawOutboundEdge(ctx, w, h, now) {
+    const pulse = 0.45 + (Math.sin(now * 0.0022) + 1) * 0.18;
+    const center = w * 0.5;
+    ctx.save();
+    const edgeGlow = ctx.createLinearGradient(0, 0, 0, 18);
+    edgeGlow.addColorStop(0, `rgba(82, 190, 255, ${0.16 * pulse})`);
+    edgeGlow.addColorStop(1, 'rgba(82, 190, 255, 0)');
+    ctx.fillStyle = edgeGlow;
+    ctx.fillRect(0, 0, w, 18);
+    ctx.strokeStyle = `rgba(113, 210, 255, ${0.24 * pulse})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 8]);
+    ctx.beginPath();
+    ctx.moveTo(w * 0.16, 3);
+    ctx.lineTo(w * 0.84, 3);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(119, 220, 255, ${0.2 + pulse * 0.25})`;
+    ctx.shadowColor = '#55ceff';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(center, 2, Math.min(40, w * 0.12), 0, Math.PI);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawBase(ctx, w, h, base, placeholder, now = 0) {
     const layout = getBaseLayout(w, h);
     const { centerX: cx, centerY: cy, hullWidth: bw, hullHeight: bh } = layout;
     ctx.save();
 
-    // Local shield halo; the opposing station is intentionally never drawn.
-    ctx.strokeStyle = 'rgba(77, 194, 255, .14)';
+    // Local animated shield halo; no opposing station is ever rendered.
+    const shieldPulse = 0.65 + (Math.sin(now * 0.002) + 1) * 0.16;
+    ctx.strokeStyle = `rgba(77, 194, 255, ${0.1 * shieldPulse})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + bh * .1, bw * .57, bh * .78, 0, Math.PI, Math.PI * 2);
+    ctx.ellipse(cx, cy + bh * .1, bw * (0.57 + 0.012 * Math.sin(now * 0.0014)), bh * .78, 0, Math.PI, Math.PI * 2);
     ctx.stroke();
 
     const hull = new Path2D();
@@ -221,6 +268,8 @@ export class ArenaRenderer {
 
     // Twin engine lights.
     for (const side of [-1, 1]) {
+      const enginePulse = 0.7 + (Math.sin(now * 0.012 + side) + 1) * 0.15;
+      ctx.globalAlpha = enginePulse;
       ctx.fillStyle = '#76a6ff';
       ctx.shadowColor = '#579dff';
       ctx.shadowBlur = 12;
@@ -228,13 +277,14 @@ export class ArenaRenderer {
       ctx.ellipse(cx + side * bw * .34, cy + bh * .29, 4, 8, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
 
     const slotCount = placeholder ? 4 : (base?.level === 3 ? 8 : base?.level === 2 ? 6 : 4);
     const installed = new Map((base?.modules || []).map(module => [module.slotId, module.type]));
     layout.slots.slice(0, slotCount).forEach(slot => {
       const moduleType = installed.get(slot.id);
-      this.drawSlot(ctx, slot, moduleType);
+      this.drawSlot(ctx, slot, moduleType, now);
     });
 
     // Compact base label and health status.
@@ -253,7 +303,7 @@ export class ArenaRenderer {
     ctx.restore();
   }
 
-  drawSlot(ctx, slot, moduleType) {
+  drawSlot(ctx, slot, moduleType, now = 0) {
     ctx.save();
     if (!moduleType) {
       ctx.fillStyle = 'rgba(5, 16, 40, .9)';
@@ -267,21 +317,24 @@ export class ArenaRenderer {
       ctx.font = '12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('+', slot.x, slot.y + .5);
     } else if (moduleType === 'ballistic') {
+      const aimAngle = -Math.PI / 2 + Math.sin(now * .0011 + slot.x) * .12;
       ctx.fillStyle = '#1d3656'; ctx.strokeStyle = '#68d9ff'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.arc(slot.x, slot.y, slot.radius * .82, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = '#b0efff'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(slot.x, slot.y - 2); ctx.lineTo(slot.x, slot.y - slot.radius * 1.15); ctx.stroke();
-      ctx.fillStyle = '#76eaff'; ctx.beginPath(); ctx.arc(slot.x, slot.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(slot.x, slot.y); ctx.lineTo(slot.x + Math.cos(aimAngle) * slot.radius * 1.15, slot.y + Math.sin(aimAngle) * slot.radius * 1.15); ctx.stroke();
+      ctx.fillStyle = '#76eaff'; ctx.shadowColor = '#55dfff'; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(slot.x, slot.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
     } else if (moduleType === 'laser') {
+      const laserPulse = 3.2 + (Math.sin(now * .004 + slot.x) + 1) * 1.2;
       ctx.fillStyle = '#39234e'; ctx.strokeStyle = '#ff8de8'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.arc(slot.x, slot.y, slot.radius * .82, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.shadowColor = '#ff70df'; ctx.shadowBlur = 10; ctx.fillStyle = '#ff9deb';
-      ctx.beginPath(); ctx.arc(slot.x, slot.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.shadowColor = '#ff70df'; ctx.shadowBlur = 10 + laserPulse; ctx.fillStyle = '#ff9deb';
+      ctx.beginPath(); ctx.arc(slot.x, slot.y, laserPulse, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
     } else if (moduleType === 'reactor') {
       ctx.fillStyle = '#514126'; ctx.strokeStyle = '#ffdb77'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.moveTo(slot.x, slot.y - slot.radius); ctx.lineTo(slot.x + slot.radius, slot.y); ctx.lineTo(slot.x, slot.y + slot.radius); ctx.lineTo(slot.x - slot.radius, slot.y); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#fff0a4'; ctx.shadowColor = '#ffd96b'; ctx.shadowBlur = 10;
-      ctx.beginPath(); ctx.arc(slot.x, slot.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(slot.x, slot.y, 2.5 + (Math.sin(now * .006 + slot.x) + 1) * 1.1, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
     } else if (moduleType === 'hangar') {
       ctx.fillStyle = '#2e2857'; ctx.strokeStyle = '#b69bff'; ctx.lineWidth = 1.2;
       roundedRect(ctx, slot.x - slot.radius, slot.y - slot.radius * .75, slot.radius * 2, slot.radius * 1.5, 4); ctx.fill(); ctx.stroke();
@@ -290,21 +343,43 @@ export class ArenaRenderer {
     ctx.restore();
   }
 
-  drawShip(ctx, w, h, ship) {
+  drawShip(ctx, w, h, ship, now = 0) {
     const x = ship.x * w;
     const y = ship.y * h;
     const friendly = ship.friendly;
     const color = friendly ? '#68eaff' : '#ff82b3';
     const size = Math.max(7, Math.min(12, w * (ship.type === 'bomber' ? .033 : .026)));
     const angle = friendly ? -Math.PI / 2 : Math.PI / 2;
+    const pulse = 0.72 + (Math.sin(now * 0.024 + String(ship.id).length * 1.7) + 1) * 0.2;
+
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
+
+    // Animated engine plume and a short luminous wake.
+    ctx.globalAlpha = pulse;
     ctx.shadowColor = color;
     ctx.shadowBlur = 12;
-    ctx.fillStyle = friendly ? 'rgba(52, 184, 226, .9)' : 'rgba(228, 89, 150, .9)';
+    const plumeLength = size * (1.35 + pulse * 0.65);
+    const plume = ctx.createLinearGradient(-size * 0.55, 0, -plumeLength, 0);
+    plume.addColorStop(0, '#ffffff');
+    plume.addColorStop(.24, color);
+    plume.addColorStop(1, 'rgba(75, 145, 255, 0)');
+    ctx.fillStyle = plume;
+    ctx.beginPath();
+    ctx.moveTo(-size * .55, -size * .2);
+    ctx.lineTo(-plumeLength, 0);
+    ctx.lineTo(-size * .55, size * .2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 13;
+    ctx.fillStyle = friendly ? 'rgba(52, 184, 226, .94)' : 'rgba(228, 89, 150, .94)';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.25;
     ctx.beginPath();
     if (ship.type === 'bomber') {
       ctx.moveTo(size * 1.2, 0);
@@ -325,17 +400,25 @@ export class ArenaRenderer {
       ctx.lineTo(-size, size * .72);
     }
     ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Reflective spine and cockpit add a little more definition to each hull.
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#e8fbff';
-    ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(235, 250, 255, .6)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(size * .72, 0);
+    ctx.lineTo(-size * .48, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#f4fdff';
+    ctx.beginPath(); ctx.ellipse(size * .28, 0, size * .2, size * .13, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
     const barW = size * 2.1;
     const ratio = clamp(ship.hp / ship.maxHp, 0, 1);
     ctx.fillStyle = 'rgba(5, 9, 22, .8)';
-    ctx.fillRect(x - barW / 2, y + size * 1.1, barW, 2);
+    ctx.fillRect(x - barW / 2, y + size * 1.25, barW, 2);
     ctx.fillStyle = friendly ? '#52e4ce' : '#ff759f';
-    ctx.fillRect(x - barW / 2, y + size * 1.1, barW * ratio, 2);
+    ctx.fillRect(x - barW / 2, y + size * 1.25, barW * ratio, 2);
   }
 
   drawProjectiles(ctx, w, h, projectiles) {
@@ -345,11 +428,13 @@ export class ArenaRenderer {
       const color = projectile.friendly ? '#7befff' : '#ff83b0';
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.4;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 9;
-      ctx.beginPath(); ctx.moveTo(x, y + (projectile.friendly ? 8 : -8)); ctx.lineTo(x, y); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(x, y + (projectile.friendly ? 11 : -11)); ctx.lineTo(x, y); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = .45;
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -371,16 +456,38 @@ export class ArenaRenderer {
   drawEffects(ctx, w, h, effects) {
     for (const effect of effects) {
       const ratio = clamp(1 - effect.age / effect.duration, 0, 1);
-      const x = effect.x * w; const y = effect.y * h;
-      ctx.save(); ctx.globalAlpha = ratio;
+      const progress = 1 - ratio;
+      const x = effect.x * w;
+      const y = effect.y * h;
+      ctx.save();
+      ctx.globalAlpha = ratio;
       if (effect.type === 'explosion' || effect.type === 'base-hit') {
-        ctx.strokeStyle = '#ffb36f'; ctx.lineWidth = 2; ctx.shadowColor = '#ff8d5e'; ctx.shadowBlur = 15;
-        ctx.beginPath(); ctx.arc(x, y, (1 - ratio) * 24 + 3, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = '#fff0bd'; ctx.beginPath(); ctx.arc(x, y, (1 - ratio) * 5 + 1, 0, Math.PI * 2); ctx.fill();
+        const radius = progress * (effect.type === 'base-hit' ? 58 : 30) + 3;
+        ctx.strokeStyle = effect.type === 'base-hit' ? '#76eaff' : '#ffb36f';
+        ctx.lineWidth = effect.type === 'base-hit' ? 2.5 : 2;
+        ctx.shadowColor = effect.type === 'base-hit' ? '#55cfff' : '#ff8d5e';
+        ctx.shadowBlur = 17;
+        ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#fff0bd';
+        ctx.beginPath(); ctx.arc(x, y, (1 - progress) * 6 + 1, 0, Math.PI * 2); ctx.fill();
+        if (effect.type === 'base-hit') {
+          ctx.globalAlpha = ratio * .55;
+          ctx.fillStyle = '#6bdfff';
+          ctx.fillRect(0, y - 1, w, 2);
+        }
+      } else if (effect.type === 'hit' || effect.type === 'impact') {
+        const radius = progress * 15 + 2;
+        ctx.strokeStyle = effect.type === 'impact' ? '#fff2bb' : '#d7f5ff';
+        ctx.lineWidth = 1.6;
+        ctx.shadowColor = '#8eeaff';
+        ctx.shadowBlur = 11;
+        ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(x, y, 2 + ratio * 2, 0, Math.PI * 2); ctx.fill();
       } else {
         ctx.strokeStyle = effect.type === 'launch' ? '#62eaff' : '#d7f5ff';
-        ctx.lineWidth = 1.4; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 9;
-        ctx.beginPath(); ctx.arc(x, y, (1 - ratio) * 13 + 2, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1.5; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(x, y, progress * 17 + 2, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.restore();
     }
