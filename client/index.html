@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#060817">
+  <meta name="description" content="ORBITAL WAR — космическая PvP-стратегия в браузере.">
+  <title>ORBITAL WAR</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="starfield" aria-hidden="true"></div>
+  <main id="app">
+    <section id="home-screen" class="screen active menu-screen">
+      <div class="brand-block">
+        <div class="brand-orbit" aria-hidden="true"><span></span></div>
+        <p class="eyebrow">TACTICAL SPACE FRONTIER</p>
+        <h1>ORBITAL <span>WAR</span></h1>
+        <p class="brand-subtitle">Твоя база. Твой флот. Твоя орбита.</p>
+      </div>
+      <div class="menu-actions">
+        <button class="primary-button" id="open-network">СЕТЕВАЯ ИГРА</button>
+        <button class="secondary-button" id="open-bot">ИГРА С БОТОМ</button>
+        <button class="ghost-button" id="open-settings">НАСТРОЙКИ</button>
+      </div>
+      <div class="menu-footer"><span class="online-dot"></span> REAL-TIME PvP · 2 PLAYERS</div>
+    </section>
+
+    <section id="network-screen" class="screen menu-screen">
+      <div class="subpage-heading">
+        <button class="icon-button" id="network-back" aria-label="Назад">←</button>
+        <div><p class="eyebrow">MULTIPLAYER</p><h2>СЕТЕВАЯ ИГРА</h2></div>
+      </div>
+      <div class="menu-actions compact-actions">
+        <button class="primary-button" id="create-room">СОЗДАТЬ КОМНАТУ</button>
+        <button class="secondary-button" id="open-join">ПРИСОЕДИНИТЬСЯ К КОМНАТЕ</button>
+      </div>
+      <div class="connection-note"><span class="status-light" id="network-light"></span><span id="network-status">Подключение к серверу…</span></div>
+    </section>
+
+    <section id="waiting-screen" class="screen menu-screen">
+      <div class="subpage-heading centered-heading">
+        <p class="eyebrow">ОЖИДАНИЕ СОПЕРНИКА</p>
+        <h2>КОМНАТА СОЗДАНА</h2>
+      </div>
+      <div class="room-code-card">
+        <span class="eyebrow">КОД ДЛЯ ПОДКЛЮЧЕНИЯ</span>
+        <div id="room-code" class="room-code">-----</div>
+        <button class="secondary-button copy-button" id="copy-code">КОПИРОВАТЬ КОД</button>
+      </div>
+      <div class="waiting-indicator"><span class="pulse-ring"></span><span id="waiting-text">Ожидаем второго игрока…</span></div>
+      <button class="ghost-button" id="cancel-room">ОТМЕНИТЬ</button>
+    </section>
+
+    <section id="join-screen" class="screen menu-screen">
+      <div class="subpage-heading">
+        <button class="icon-button" id="join-back" aria-label="Назад">←</button>
+        <div><p class="eyebrow">MULTIPLAYER</p><h2>ВХОД В КОМНАТУ</h2></div>
+      </div>
+      <form id="join-form" class="join-form">
+        <label for="room-code-input">ПЯТИЗНАЧНЫЙ КОД</label>
+        <input id="room-code-input" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="one-time-code" placeholder="00000" required>
+        <button class="primary-button" type="submit">ПРИСОЕДИНИТЬСЯ</button>
+      </form>
+      <p class="muted-caption">Код комнаты должен сообщить вам второй игрок.</p>
+    </section>
+
+    <section id="settings-screen" class="screen menu-screen">
+      <div class="subpage-heading">
+        <button class="icon-button" id="settings-back" aria-label="Назад">←</button>
+        <div><p class="eyebrow">PREFERENCES</p><h2>НАСТРОЙКИ</h2></div>
+      </div>
+      <div class="settings-list">
+        <label class="setting-row"><span><strong>Звуковые эффекты</strong><small>Кнопки и игровые события</small></span><input type="checkbox" id="sound-toggle"><i></i></label>
+        <label class="setting-row"><span><strong>Музыка</strong><small>Фоновый космический эмбиент</small></span><input type="checkbox" id="music-toggle"><i></i></label>
+        <button class="setting-row fullscreen-row" id="fullscreen-toggle"><span><strong>Полный экран</strong><small>Когда поддерживается браузером</small></span><b>↗</b></button>
+      </div>
+      <p class="muted-caption">Настройки сохраняются на этом устройстве.</p>
+    </section>
+
+    <section id="game-screen" class="screen game-screen">
+      <header class="game-topbar">
+        <div class="match-state"><span class="status-light live-light"></span><span id="match-status">БОЙ</span></div>
+        <div class="base-health-block">
+          <div class="top-metric"><span>БАЗА</span><strong id="hp-value">1000</strong></div>
+          <div class="meter"><span id="hp-fill"></span></div>
+        </div>
+        <div class="energy-block"><span class="energy-icon">✦</span><strong id="energy-value">200</strong><small>ЭНЕРГИЯ</small></div>
+        <div class="level-block"><small>УР.</small><strong id="level-value">1</strong></div>
+      </header>
+
+      <div class="arena-wrap">
+        <canvas id="arena" aria-label="Космическое поле боя"></canvas>
+        <div id="opponent-alert" class="opponent-alert hidden"><span class="status-light"></span> СОПЕРНИК ОТКЛЮЧЁН · 30 СЕК</div>
+        <div id="connection-overlay" class="connection-overlay hidden">
+          <div class="spinner"></div>
+          <strong>СВЯЗЬ ПОТЕРЯНА</strong>
+          <span>Пытаемся восстановить соединение…</span>
+        </div>
+      </div>
+
+      <section class="command-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">КОМАНДОВАНИЕ</span><strong>ПРОИЗВОДСТВО ФЛОТА</strong></div>
+          <div class="production-state" id="production-state">АНГАР ГОТОВ</div>
+        </div>
+        <div class="ship-actions">
+          <button class="ship-button" data-ship="fighter"><span class="ship-symbol fighter-symbol">▲</span><span class="ship-name">Истребитель</span><small>60 ✦ · 3с</small></button>
+          <button class="ship-button" data-ship="bomber"><span class="ship-symbol bomber-symbol">◆</span><span class="ship-name">Бомбардировщик</span><small>110 ✦ · 6.2с</small></button>
+          <button class="ship-button" data-ship="interceptor"><span class="ship-symbol interceptor-symbol">➤</span><span class="ship-name">Перехватчик</span><small>90 ✦ · 4.5с</small></button>
+        </div>
+        <div class="panel-footer">
+          <span id="generation-value">+5 ЭНЕРГИИ/С</span>
+          <button id="upgrade-button" class="upgrade-button">УЛУЧШИТЬ БАЗУ <span id="upgrade-cost">300 ✦</span></button>
+        </div>
+      </section>
+    </section>
+
+    <section id="result-screen" class="screen menu-screen result-screen">
+      <div class="result-emblem" id="result-emblem">✦</div>
+      <p class="eyebrow">ORBITAL WAR · MATCH COMPLETE</p>
+      <h2 id="result-title">ПОБЕДА</h2>
+      <p id="result-subtitle" class="brand-subtitle">Вражеская база уничтожена.</p>
+      <div class="menu-actions compact-actions">
+        <button class="primary-button" id="rematch-button">ИГРАТЬ СНОВА</button>
+        <button class="secondary-button" id="result-menu-button">В МЕНЮ</button>
+      </div>
+      <p id="rematch-status" class="muted-caption"></p>
+    </section>
+  </main>
+
+  <div id="slot-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="slot-modal-title">
+    <div class="modal-card">
+      <div class="modal-heading"><div><p class="eyebrow">МОДУЛЬ БАЗЫ</p><h3 id="slot-modal-title">СВОБОДНЫЙ ОТСЕК</h3></div><button class="icon-button close-modal" id="close-slot-modal" aria-label="Закрыть">×</button></div>
+      <div class="module-options">
+        <button class="module-option" data-module="ballistic"><span class="module-icon ballistic-icon">⊕</span><span><strong>Баллистическая пушка</strong><small>Средний урон · 100 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+        <button class="module-option" data-module="laser"><span class="module-icon laser-icon">⌁</span><span><strong>Лазерная установка</strong><small>Большая дальность · 150 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+        <button class="module-option" data-module="reactor"><span class="module-icon reactor-icon">✦</span><span><strong>Энергогенератор</strong><small>+3 энергии/с · 120 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+        <button class="module-option" data-module="hangar"><span class="module-icon hangar-icon">▦</span><span><strong>Ускоренный ангар</strong><small>Производство быстрее · 180 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
