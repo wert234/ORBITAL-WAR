@@ -256,11 +256,10 @@ export class GameUI {
     document.getElementById('opponent-hp-fill').style.width = `${opponentRatio * 100}%`;
     document.getElementById('energy-value').textContent = Math.floor(base.energy);
     document.getElementById('generation-value').textContent = `+${base.generation}/С`;
-    document.getElementById('match-status').textContent = this.state.opponentIsBot ? 'БОТ' : (this.state.opponentConnected ? 'БОЙ' : 'СВЯЗЬ');
+    document.getElementById('match-status').textContent = this.state.opponentConnected ? 'LIVE' : 'OFFLINE';
     const opponentLabel = document.getElementById('opponent-label');
     if (opponentLabel) opponentLabel.textContent = this.state.opponentIsBot ? 'БОТ' : 'ВРАГ';
 
-    document.getElementById('level-value').textContent = base.level;
 
     if (!this.modal.classList.contains('hidden')) this.openModuleModal();
     if (!this.upgradeModal.classList.contains('hidden')) this.openUpgradeModal();
@@ -275,7 +274,7 @@ export class GameUI {
     document.getElementById('opponent-alert').classList.toggle('hidden', connected);
     if (this.state) {
       this.state.opponentConnected = connected;
-      document.getElementById('match-status').textContent = this.state.opponentIsBot ? 'БОТ' : (connected ? 'БОЙ' : 'СВЯЗЬ');
+      document.getElementById('match-status').textContent = connected ? 'LIVE' : 'OFFLINE';
     }
   }
 

@@ -41,10 +41,19 @@ export function getBaseLayout(width, height) {
 export class ArenaRenderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.shipSprites = {};
+    this.shipSprites = Object.create(null);
+    this.spriteLoadState = Object.create(null);
+    const spriteDirectory = new URL('../../resources/img/', import.meta.url);
     for (const type of ['fighter', 'bomber', 'interceptor']) {
       const image = new Image();
-      image.src = `/resources/img/${type}.png`;
+      image.decoding = 'async';
+      this.spriteLoadState[type] = 'loading';
+      image.onload = () => { this.spriteLoadState[type] = 'ready'; };
+      image.onerror = () => {
+        this.spriteLoadState[type] = 'error';
+        console.error(`[ORBITAL WAR] Не удалось загрузить спрайт ${type}:`, image.src);
+      };
+      image.src = new URL(`${type}.png`, spriteDirectory).href;
       this.shipSprites[type] = image;
     }
     this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
@@ -54,7 +63,7 @@ export class ArenaRenderer {
     this.previous = null;
     this.current = null;
     this.receivedAt = performance.now();
-    this.stars = Array.from({ length: 110 }, (_, index) => {
+    this.stars = Array.from({ length: 190 }, (_, index) => {
       const seed = (index * 9301 + 49297) % 233280;
       const seed2 = (index * 233 + 719) % 997;
       return {
@@ -65,7 +74,7 @@ export class ArenaRenderer {
         speed: 0.5 + (index % 5) * 0.22
       };
     });
-    this.spaceDust = Array.from({ length: 26 }, (_, index) => ({
+    this.spaceDust = Array.from({ length: 46 }, (_, index) => ({
       x: ((index * 71 + 19) % 997) / 997,
       y: ((index * 137 + 53) % 991) / 991,
       speed: 0.35 + (index % 6) * 0.16,
@@ -132,89 +141,126 @@ export class ArenaRenderer {
     }
 
     this.drawBeams(ctx, w, h, this.getInterpolatedList('beams'));
-    this.drawProjectiles(ctx, w, h, this.getInterpolatedList('projectiles'), now);
+    this.drawProjectiles(ctx, w, h, this.getInterpolatedList('projectiles'));
     this.getInterpolatedList('ships').forEach(ship => this.drawShip(ctx, w, h, ship, now));
     this.drawEffects(ctx, w, h, state.effects || []);
     this.drawBase(ctx, w, h, state.base, false, now);
   }
 
   drawBackground(ctx, w, h, now) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, '#080b20');
-    gradient.addColorStop(0.52, '#080d25');
-    gradient.addColorStop(1, '#10132e');
+    const t = now * 0.001;
+    const gradient = ctx.createLinearGradient(0, 0, w * 0.2, h);
+    gradient.addColorStop(0, '#030713');
+    gradient.addColorStop(0.48, '#07132a');
+    gradient.addColorStop(1, '#090b20');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
 
-    const glow = ctx.createRadialGradient(w * 0.5, h * 0.42, 5, w * 0.5, h * 0.42, w * 0.7);
-    glow.addColorStop(0, 'rgba(45, 64, 143, .19)');
-    glow.addColorStop(1, 'rgba(9, 13, 35, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, w, h);
-
-    // Slowly drifting nebula clouds add depth while remaining inexpensive to render.
+    // Large, slow nebula clouds create depth without external textures or heavy filters.
     ctx.save();
-    const driftX = Math.sin(now * 0.00008) * w * 0.08;
-    const driftY = Math.cos(now * 0.00006) * h * 0.05;
-    for (const cloud of [
-      { x: .22, y: .24, rx: .34, ry: .22, color: '72, 67, 180', alpha: .10 },
-      { x: .78, y: .62, rx: .30, ry: .26, color: '35, 125, 185', alpha: .085 },
-      { x: .48, y: .86, rx: .38, ry: .18, color: '100, 58, 150', alpha: .06 }
-    ]) {
-      const cx = cloud.x * w + driftX;
-      const cy = cloud.y * h + driftY;
-      const haze = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w * cloud.rx, h * cloud.ry));
-      haze.addColorStop(0, `rgba(${cloud.color}, ${cloud.alpha})`);
-      haze.addColorStop(1, 'rgba(8, 12, 35, 0)');
+    ctx.globalCompositeOperation = 'screen';
+    const nebulae = [
+      { x: .16, y: .24, radius: .42, color: 'rgba(20, 91, 160, .23)', drift: .035 },
+      { x: .82, y: .38, radius: .37, color: 'rgba(90, 47, 145, .18)', drift: .028 },
+      { x: .46, y: .78, radius: .33, color: 'rgba(14, 91, 126, .13)', drift: .022 }
+    ];
+    for (const cloud of nebulae) {
+      const cx = w * (cloud.x + Math.sin(t * .12 + cloud.y * 8) * cloud.drift);
+      const cy = h * (cloud.y + Math.cos(t * .1 + cloud.x * 6) * cloud.drift);
+      const radius = Math.max(w, h) * cloud.radius;
+      const haze = ctx.createRadialGradient(cx, cy, radius * .03, cx, cy, radius);
+      haze.addColorStop(0, cloud.color);
+      haze.addColorStop(.42, cloud.color.replace(/\.\d+\)/, '.055)'));
+      haze.addColorStop(1, 'rgba(5, 12, 30, 0)');
       ctx.fillStyle = haze;
       ctx.fillRect(0, 0, w, h);
     }
     ctx.restore();
 
-    for (const star of this.stars) {
-      const twinkle = 0.38 + (Math.sin(now * 0.001 * star.speed + star.phase) + 1) * 0.25;
-      ctx.globalAlpha = twinkle;
-      ctx.fillStyle = star.r > 1 ? '#c6e5ff' : '#829bcf';
-      ctx.beginPath();
-      ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // Distant planet and its thin ring, kept near the edge so it never obscures the battle lane.
+    const planetX = w * (.88 + Math.sin(t * .045) * .012);
+    const planetY = h * (.245 + Math.cos(t * .05) * .012);
+    const planetR = Math.min(w, h) * .105;
+    ctx.save();
+    ctx.translate(planetX, planetY);
+    ctx.rotate(-.24);
+    ctx.strokeStyle = 'rgba(91, 166, 226, .18)';
+    ctx.lineWidth = Math.max(1, planetR * .07);
+    ctx.beginPath(); ctx.ellipse(0, 0, planetR * 1.65, planetR * .42, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+    const planet = ctx.createRadialGradient(-planetR * .35, -planetR * .38, planetR * .05, 0, 0, planetR);
+    planet.addColorStop(0, 'rgba(77, 112, 170, .48)');
+    planet.addColorStop(.56, 'rgba(28, 48, 91, .42)');
+    planet.addColorStop(1, 'rgba(6, 12, 31, .08)');
+    ctx.fillStyle = planet;
+    ctx.beginPath(); ctx.arc(0, 0, planetR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(114, 190, 255, .18)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, planetR, -.95, .8); ctx.stroke();
+    ctx.restore();
 
-    // Slow parallax dust gives the arena depth without heavy image assets.
-    for (const particle of this.spaceDust) {
-      const y = ((particle.y + now * 0.000006 * particle.speed) % 1) * h;
-      const x = particle.x * w;
-      ctx.globalAlpha = 0.1 + particle.speed * 0.07;
-      ctx.strokeStyle = '#9bcfff';
+    // Star layers: fine points twinkle; a few brighter stars have a subtle cross flare.
+    for (const star of this.stars) {
+      const twinkle = 0.3 + (Math.sin(t * star.speed + star.phase) + 1) * 0.28;
+      const driftY = (star.y * h + now * .0015 * star.speed) % h;
+      const x = star.x * w;
+      ctx.globalAlpha = twinkle;
+      ctx.fillStyle = star.r > 1.05 ? '#d8efff' : '#8caedb';
+      ctx.beginPath();
+      ctx.arc(x, driftY, star.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (star.r > 1.15) {
+        ctx.strokeStyle = 'rgba(177, 220, 255, .38)';
+        ctx.lineWidth = .65;
+        ctx.beginPath(); ctx.moveTo(x - 3.5, driftY); ctx.lineTo(x + 3.5, driftY); ctx.moveTo(x, driftY - 3.5); ctx.lineTo(x, driftY + 3.5); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // A central navigation corridor and side beacons make the two-screen route readable.
+    ctx.save();
+    const corridor = ctx.createLinearGradient(w * .5, 0, w * .5, h);
+    corridor.addColorStop(0, 'rgba(60, 143, 255, .015)');
+    corridor.addColorStop(.48, 'rgba(67, 172, 255, .095)');
+    corridor.addColorStop(1, 'rgba(60, 143, 255, .018)');
+    ctx.fillStyle = corridor;
+    ctx.fillRect(w * .29, 0, w * .42, h);
+    for (const side of [.16, .84]) {
+      const beamAlpha = .1 + (Math.sin(t * 1.1 + side * 8) + 1) * .045;
+      ctx.strokeStyle = `rgba(91, 177, 255, ${beamAlpha})`;
       ctx.lineWidth = 1;
+      ctx.setLineDash([2, 14]);
+      ctx.lineDashOffset = -now * .012;
+      ctx.beginPath(); ctx.moveTo(w * side, 0); ctx.lineTo(w * side, h); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 4; i += 1) {
+        const y = ((i / 4 + t * .035) % 1) * h;
+        const pulse = 1 + (Math.sin(t * 2 + i) + 1) * 1.2;
+        ctx.fillStyle = `rgba(104, 211, 255, ${beamAlpha + .08})`;
+        ctx.shadowColor = '#5bcaff'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(w * side, y, pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    ctx.restore();
+
+    // Moving dust streaks supply a gentle sense of forward travel.
+    for (const particle of this.spaceDust) {
+      const progress = (particle.y + t * .035 * particle.speed) % 1;
+      const y = progress * h;
+      const x = particle.x * w + Math.sin(t * .2 + particle.y * 12) * 3;
+      ctx.globalAlpha = .1 + particle.speed * .065;
+      ctx.strokeStyle = '#9bcfff';
+      ctx.lineWidth = particle.speed > 1 ? 1.2 : .75;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.lineTo(x, y + particle.length);
+      ctx.lineTo(x + Math.sin(t + particle.x * 5) * 1.5, y + particle.length * (1 + particle.speed * .35));
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(85, 137, 218, .075)';
+    const centralPulse = .04 + (Math.sin(t * 1.4) + 1) * .018;
+    ctx.strokeStyle = `rgba(105, 188, 255, ${centralPulse})`;
     ctx.lineWidth = 1;
-    const spacing = Math.max(34, w / 8);
-    for (let x = w % spacing; x < w; x += spacing) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let y = 25; y < h; y += spacing) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
-    ctx.restore();
-
-    // Faint vertical travel lane makes both fleets' directions legible.
-    ctx.save();
-    const lane = ctx.createLinearGradient(w * .5, 0, w * .5, h);
-    lane.addColorStop(0, 'rgba(89, 132, 255, .012)');
-    lane.addColorStop(.5, 'rgba(89, 132, 255, .055)');
-    lane.addColorStop(1, 'rgba(89, 132, 255, .012)');
-    ctx.fillStyle = lane;
-    ctx.fillRect(w * .28, 0, w * .44, h);
-    ctx.restore();
+    ctx.beginPath(); ctx.ellipse(w * .5, h * .52, w * .32, h * .28, Math.sin(t * .06) * .025, 0, Math.PI * 2); ctx.stroke();
   }
 
   drawOutboundEdge(ctx, w, h, now) {
@@ -415,97 +461,124 @@ export class ArenaRenderer {
     const y = ship.y * h;
     const friendly = ship.friendly;
     const color = friendly ? '#68eaff' : '#ff82b3';
-    const size = Math.max(7, Math.min(12, w * (ship.type === 'bomber' ? .033 : .026)));
+    const size = clamp(w * .038, 11, 16);
     const pulse = 0.72 + (Math.sin(now * 0.024 + String(ship.id).length * 1.7) + 1) * 0.2;
+    const sprite = this.shipSprites?.[ship.type];
+    const spriteReady = sprite && sprite.complete && sprite.naturalWidth > 0;
+    const trim = {
+      fighter: [.104, .048, .791, .871],
+      bomber: [.017, .046, .965, .842],
+      interceptor: [.114, .018, .771, .918]
+    }[ship.type] || [0, 0, 1, 1];
 
     ctx.save();
     ctx.translate(x, y);
-    const sprite = this.shipSprites[ship.type];
-    const spriteReady = sprite && sprite.complete && sprite.naturalWidth > 0;
-    const shipAngle = friendly ? 0 : Math.PI;
-    ctx.rotate(shipAngle);
+    // All supplied assets are top-down with the nose facing up.
+    ctx.rotate(friendly ? 0 : Math.PI);
 
-    // Engine plume is drawn behind the sprite and pulses independently.
+    // Engine plume sits behind the hull and pulses independently.
     ctx.globalAlpha = pulse;
     ctx.shadowColor = color;
     ctx.shadowBlur = 15;
-    const plumeGradient = ctx.createLinearGradient(0, size * .35, 0, size * 2.1);
-    plumeGradient.addColorStop(0, '#f5ffff');
-    plumeGradient.addColorStop(.22, color);
-    plumeGradient.addColorStop(1, 'rgba(70,150,255,0)');
-    ctx.fillStyle = plumeGradient;
+    const plumeLength = size * (1.5 + pulse * .55);
+    const plume = ctx.createLinearGradient(0, size * .28, 0, plumeLength);
+    plume.addColorStop(0, '#ffffff');
+    plume.addColorStop(.2, color);
+    plume.addColorStop(1, 'rgba(75, 145, 255, 0)');
+    ctx.fillStyle = plume;
     ctx.beginPath();
-    ctx.moveTo(-size * .24, size * .38);
-    ctx.quadraticCurveTo(0, size * (1.1 + pulse * .35), size * .24, size * .38);
+    ctx.moveTo(-size * .19, size * .3);
+    ctx.quadraticCurveTo(0, plumeLength, size * .19, size * .3);
     ctx.closePath();
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
 
     if (spriteReady) {
-      const aspect = sprite.naturalWidth / sprite.naturalHeight;
-      const drawH = size * (ship.type === 'bomber' ? 3.25 : ship.type === 'interceptor' ? 3.0 : 2.9);
-      const drawW = drawH * aspect;
+      const [sxRatio, syRatio, swRatio, shRatio] = trim;
+      const sx = sprite.naturalWidth * sxRatio;
+      const sy = sprite.naturalHeight * syRatio;
+      const sw = sprite.naturalWidth * swRatio;
+      const sh = sprite.naturalHeight * shRatio;
+      const heightFactor = ship.type === 'bomber' ? 2.8 : ship.type === 'interceptor' ? 3.25 : 3.15;
+      const drawH = size * heightFactor;
+      const drawW = drawH * sw / sh;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 7;
-      ctx.drawImage(sprite, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.shadowBlur = 8;
+      ctx.drawImage(sprite, sx, sy, sw, sh, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.shadowBlur = 0;
-      // Team-color edge marker keeps both fleets distinguishable without tinting texture.
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = .72;
-      ctx.lineWidth = 1;
+      // Tiny team-colored engine lights make ownership clear without recoloring the original texture.
+      ctx.fillStyle = color;
+      ctx.globalAlpha = .88;
+      ctx.shadowColor = color; ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.ellipse(0, 0, drawW * .43, drawH * .43, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(-drawW * .16, drawH * .39, Math.max(1.1, size * .055), 0, Math.PI * 2);
+      ctx.arc(drawW * .16, drawH * .39, Math.max(1.1, size * .055), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     } else {
-      // Fallback vector silhouette if an image fails to load.
-      ctx.fillStyle = friendly ? '#39a9d2' : '#c94f83';
+      // Fallback silhouette remains available while a texture is loading or if it is missing.
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 13;
+      ctx.fillStyle = friendly ? 'rgba(52, 184, 226, .94)' : 'rgba(228, 89, 150, .94)';
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.25;
       ctx.beginPath();
-      ctx.moveTo(0, -size * 1.25);
-      ctx.lineTo(size * .9, size * .8);
-      ctx.lineTo(0, size * .48);
-      ctx.lineTo(-size * .9, size * .8);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
+      if (ship.type === 'bomber') {
+        ctx.moveTo(0, -size * 1.4); ctx.lineTo(size * .95, size * .75); ctx.lineTo(0, size * .55); ctx.lineTo(-size * .95, size * .75);
+      } else if (ship.type === 'interceptor') {
+        ctx.moveTo(0, -size * 1.5); ctx.lineTo(size * .7, size); ctx.lineTo(0, size * .5); ctx.lineTo(-size * .7, size);
+      } else {
+        ctx.moveTo(0, -size * 1.4); ctx.lineTo(size, size * .85); ctx.lineTo(0, size * .42); ctx.lineTo(-size, size * .85);
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    if (ship.targetId || ship.intercepted) {
+      const ring = size * (1.85 + (Math.sin(now * .01) + 1) * .08);
+      ctx.strokeStyle = ship.targetId ? 'rgba(111, 225, 255, .8)' : 'rgba(255, 193, 116, .78)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.arc(0, 0, ring, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.restore();
 
-    const barW = size * 2.1;
+    const barW = Math.max(18, size * 2.2);
     const ratio = clamp(ship.hp / ship.maxHp, 0, 1);
-    ctx.fillStyle = 'rgba(5, 9, 22, .8)';
-    ctx.fillRect(x - barW / 2, y + size * 1.25, barW, 2);
+    ctx.fillStyle = 'rgba(5, 9, 22, .85)';
+    ctx.fillRect(x - barW / 2, y + size * 1.55, barW, 2.4);
     ctx.fillStyle = friendly ? '#52e4ce' : '#ff759f';
-    ctx.fillRect(x - barW / 2, y + size * 1.25, barW * ratio, 2);
+    ctx.fillRect(x - barW / 2, y + size * 1.55, barW * ratio, 2.4);
   }
 
-  drawProjectiles(ctx, w, h, projectiles, now = 0) {
+  drawProjectiles(ctx, w, h, projectiles) {
     for (const projectile of projectiles) {
       const x = projectile.x * w;
       const y = projectile.y * h;
       const color = projectile.friendly ? '#7befff' : '#ff83b0';
-      const flicker = .82 + (Math.sin(now * .035 + x) + 1) * .09;
+      const tailDirection = projectile.friendly ? 1 : -1;
+      const tailLength = Math.max(12, Math.min(25, w * .055));
       ctx.save();
-      ctx.globalAlpha = flicker;
-      const trail = ctx.createLinearGradient(x, y - 20, x, y + 3);
-      trail.addColorStop(0, 'rgba(90,190,255,0)');
-      trail.addColorStop(.65, color);
-      trail.addColorStop(1, '#ffffff');
-      ctx.strokeStyle = trail;
-      ctx.lineWidth = 5;
+      const tail = ctx.createLinearGradient(x, y, x, y + tailDirection * tailLength);
+      tail.addColorStop(0, color);
+      tail.addColorStop(1, 'rgba(100, 170, 255, 0)');
+      ctx.strokeStyle = tail;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
       ctx.shadowColor = color;
-      ctx.shadowBlur = 17;
-      ctx.beginPath();
-      ctx.moveTo(x, y + (projectile.friendly ? 20 : -20));
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(x, y, 3.1, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(x, y, 6 + Math.sin(now * .04) * 1.2, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 13;
+      ctx.beginPath(); ctx.moveTo(x, y + tailDirection * tailLength); ctx.lineTo(x, y); ctx.stroke();
+      const glow = ctx.createRadialGradient(x, y, .5, x, y, 8);
+      glow.addColorStop(0, '#ffffff');
+      glow.addColorStop(.22, color);
+      glow.addColorStop(1, 'rgba(100, 190, 255, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x, y, 2.1, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -513,13 +586,31 @@ export class ArenaRenderer {
   drawBeams(ctx, w, h, beams) {
     for (const beam of beams) {
       const alpha = clamp(1 - beam.age / beam.duration, 0, 1);
+      const x1 = beam.x1 * w;
+      const y1 = beam.y1 * h;
+      const x2 = beam.x2 * w;
+      const y2 = beam.y2 * h;
+      const beamColor = beam.friendly === true ? '#71eaff' : beam.friendly === false ? '#ff8ab2' : '#ff9deb';
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.strokeStyle = '#ff70e8'; ctx.lineWidth = 6;
-      ctx.shadowColor = '#ff6bdf'; ctx.shadowBlur = 22;
-      ctx.beginPath(); ctx.moveTo(beam.x1 * w, beam.y1 * h); ctx.lineTo(beam.x2 * w, beam.y2 * h); ctx.stroke();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.moveTo(beam.x1 * w, beam.y1 * h); ctx.lineTo(beam.x2 * w, beam.y2 * h); ctx.stroke();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = beamColor;
+      ctx.lineWidth = 7;
+      ctx.shadowColor = beamColor;
+      ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.globalAlpha = alpha * .86;
+      ctx.strokeStyle = beamColor;
+      ctx.lineWidth = 2.8;
+      ctx.shadowBlur = 7;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = .9;
+      ctx.shadowBlur = 2;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(x2, y2, 2.5 + alpha * 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -534,16 +625,17 @@ export class ArenaRenderer {
       ctx.globalAlpha = ratio;
       if (effect.type === 'explosion' || effect.type === 'base-hit') {
         const radius = progress * (effect.type === 'base-hit' ? 58 : 30) + 3;
-        ctx.strokeStyle = effect.type === 'base-hit' ? '#76eaff' : '#ffb36f';
+        const hitColor = effect.friendly === false ? '#ff86aa' : '#76eaff';
+        ctx.strokeStyle = effect.type === 'base-hit' ? hitColor : '#ffb36f';
         ctx.lineWidth = effect.type === 'base-hit' ? 2.5 : 2;
-        ctx.shadowColor = effect.type === 'base-hit' ? '#55cfff' : '#ff8d5e';
+        ctx.shadowColor = effect.type === 'base-hit' ? hitColor : '#ff8d5e';
         ctx.shadowBlur = 17;
         ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = '#fff0bd';
         ctx.beginPath(); ctx.arc(x, y, (1 - progress) * 6 + 1, 0, Math.PI * 2); ctx.fill();
         if (effect.type === 'base-hit') {
           ctx.globalAlpha = ratio * .55;
-          ctx.fillStyle = '#6bdfff';
+          ctx.fillStyle = hitColor;
           ctx.fillRect(0, y - 1, w, 2);
         }
       } else if (effect.type === 'hit' || effect.type === 'impact') {
