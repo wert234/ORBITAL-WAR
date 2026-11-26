@@ -1,8 +1,6 @@
 const SLOT_OFFSETS = [
-  [-0.15, -0.28], [0.15, -0.28],
-  [-0.15, 0.10], [0.15, 0.10],
-  [-0.28, -0.08], [0.28, -0.08],
-  [-0.065, 0.34], [0.065, 0.34]
+  [0.12, 0.40], [0.373, 0.40], [0.627, 0.40], [0.88, 0.40],
+  [0.12, 0.79], [0.373, 0.79], [0.627, 0.79], [0.88, 0.79]
 ];
 
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -17,18 +15,20 @@ function roundedRect(ctx, x, y, width, height, radius) {
 }
 
 export function getBaseLayout(width, height) {
-  const hullWidth = Math.min(width * 0.72, 330);
-  const hullHeight = Math.min(height * 0.235, 142);
+  const hullWidth = width;
+  const hullHeight = Math.min(height * 0.28, 172);
+  const top = height - hullHeight;
   return {
     centerX: width / 2,
-    centerY: height * 0.855,
+    centerY: top + hullHeight / 2,
     hullWidth,
     hullHeight,
+    top,
     slots: SLOT_OFFSETS.map(([dx, dy], index) => ({
       id: `s${index + 1}`,
-      x: width / 2 + dx * hullWidth,
-      y: height * 0.855 + dy * hullHeight,
-      radius: Math.max(12, Math.min(17, width * 0.045))
+      x: width * dx,
+      y: top + hullHeight * dy,
+      radius: Math.max(10, Math.min(15, width * 0.038))
     }))
   };
 }
@@ -215,95 +215,74 @@ export class ArenaRenderer {
 
   drawBase(ctx, w, h, base, placeholder, now = 0) {
     const layout = getBaseLayout(w, h);
-    const { centerX: cx, centerY: cy, hullWidth: bw, hullHeight: bh } = layout;
+    const { hullHeight: bh, top } = layout;
     ctx.save();
 
-    // Local animated shield halo; no opposing station is ever rendered.
-    const shieldPulse = 0.65 + (Math.sin(now * 0.002) + 1) * 0.16;
-    ctx.strokeStyle = `rgba(77, 194, 255, ${0.1 * shieldPulse})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + bh * .1, bw * (0.57 + 0.012 * Math.sin(now * 0.0014)), bh * .78, 0, Math.PI, Math.PI * 2);
-    ctx.stroke();
-
-    const hull = new Path2D();
-    hull.moveTo(cx - bw * .31, cy - bh * .48);
-    hull.lineTo(cx + bw * .31, cy - bh * .48);
-    hull.lineTo(cx + bw * .47, cy + bh * .12);
-    hull.lineTo(cx + bw * .27, cy + bh * .47);
-    hull.lineTo(cx - bw * .27, cy + bh * .47);
-    hull.lineTo(cx - bw * .47, cy + bh * .12);
-    hull.closePath();
-    const bodyGradient = ctx.createLinearGradient(cx, cy - bh * .5, cx, cy + bh * .5);
-    bodyGradient.addColorStop(0, '#263c62');
-    bodyGradient.addColorStop(.5, '#121f3e');
-    bodyGradient.addColorStop(1, '#0b142d');
+    const pulse = 0.58 + (Math.sin(now * 0.002) + 1) * 0.16;
+    const bodyGradient = ctx.createLinearGradient(0, top, 0, h);
+    bodyGradient.addColorStop(0, '#263d65');
+    bodyGradient.addColorStop(0.18, '#17294b');
+    bodyGradient.addColorStop(1, '#09152f');
+    roundedRect(ctx, 0, top, w, bh, 8);
     ctx.fillStyle = bodyGradient;
-    ctx.shadowColor = 'rgba(65, 164, 255, .3)';
-    ctx.shadowBlur = 20;
-    ctx.fill(hull);
+    ctx.shadowColor = 'rgba(65, 164, 255, .36)';
+    ctx.shadowBlur = 22;
+    ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#58c9f0';
-    ctx.lineWidth = 1.35;
-    ctx.stroke(hull);
-
-    // Hull plating and energy spine.
-    ctx.strokeStyle = 'rgba(91, 196, 255, .34)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx - bw * .26, cy - bh * .32);
-    ctx.lineTo(cx, cy - bh * .1);
-    ctx.lineTo(cx + bw * .26, cy - bh * .32);
-    ctx.moveTo(cx - bw * .32, cy + bh * .17);
-    ctx.lineTo(cx, cy + bh * .35);
-    ctx.lineTo(cx + bw * .32, cy + bh * .17);
+    ctx.strokeStyle = `rgba(91, 215, 255, ${0.62 + pulse * 0.2})`;
+    ctx.lineWidth = 1.25;
     ctx.stroke();
-    ctx.fillStyle = 'rgba(79, 212, 255, .16)';
-    ctx.fillRect(cx - bw * .045, cy - bh * .24, bw * .09, bh * .5);
-    ctx.fillStyle = '#73efff';
-    ctx.shadowColor = '#55e4ff';
-    ctx.shadowBlur = 13;
-    ctx.fillRect(cx - 2, cy - bh * .16, 4, bh * .36);
-    ctx.shadowBlur = 0;
 
-    // Twin engine lights.
-    for (const side of [-1, 1]) {
-      const enginePulse = 0.7 + (Math.sin(now * 0.012 + side) + 1) * 0.15;
-      ctx.globalAlpha = enginePulse;
-      ctx.fillStyle = '#76a6ff';
-      ctx.shadowColor = '#579dff';
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.ellipse(cx + side * bw * .34, cy + bh * .29, 4, 8, 0, 0, Math.PI * 2);
-      ctx.fill();
+    // Broad deck plating emphasizes that this is the player's full-width base.
+    ctx.save();
+    ctx.beginPath();
+    roundedRect(ctx, 1, top + 1, Math.max(0, w - 2), Math.max(0, bh - 2), 7);
+    ctx.clip();
+    const topGlow = ctx.createLinearGradient(0, top, 0, top + 30);
+    topGlow.addColorStop(0, `rgba(83, 205, 255, ${0.24 * pulse})`);
+    topGlow.addColorStop(1, 'rgba(83, 205, 255, 0)');
+    ctx.fillStyle = topGlow;
+    ctx.fillRect(0, top, w, 30);
+
+    ctx.strokeStyle = 'rgba(112, 181, 238, .15)';
+    ctx.lineWidth = 1;
+    for (let index = 1; index < 8; index += 1) {
+      const x = w * index / 8;
+      ctx.beginPath(); ctx.moveTo(x, top + 5); ctx.lineTo(x, h); ctx.stroke();
     }
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(0, top + bh * 0.59); ctx.lineTo(w, top + bh * 0.59); ctx.stroke();
+    ctx.strokeStyle = 'rgba(72, 191, 255, .22)';
+    ctx.beginPath(); ctx.moveTo(0, top + bh - 3); ctx.lineTo(w, top + bh - 3); ctx.stroke();
+    ctx.restore();
 
-    const slotCount = placeholder ? 4 : (base?.level === 3 ? 8 : base?.level === 2 ? 6 : 4);
-    const installed = new Map((base?.modules || []).map(module => [module.slotId, module.type]));
-    layout.slots.slice(0, slotCount).forEach(slot => {
-      const moduleType = installed.get(slot.id);
-      this.drawSlot(ctx, slot, moduleType, now);
-    });
-
-    // Compact base label and health status.
-    ctx.font = '800 8px system-ui, sans-serif';
+    // Status strip and the modular hardpoints are embedded in the deck itself.
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(170, 218, 255, .66)';
-    ctx.fillText(`ORBITAL CORE · LVL ${base?.level || 1}`, cx, cy + bh * .59);
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = '800 8px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(190, 227, 255, .8)';
+    ctx.fillText(`ORBITAL CORE  ·  LVL ${base?.level || 1}`, w / 2, top + 13);
+
     if (!placeholder) {
       const healthRatio = clamp((base?.hp || 0) / (base?.maxHp || 1000), 0, 1);
-      const barW = bw * .48;
-      ctx.fillStyle = 'rgba(6, 12, 29, .9)';
-      ctx.fillRect(cx - barW / 2, cy + bh * .68, barW, 3);
+      const barW = Math.min(w * 0.26, 150);
+      ctx.fillStyle = 'rgba(4, 10, 25, .85)';
+      roundedRect(ctx, w / 2 - barW / 2, top + 18, barW, 3, 2);
+      ctx.fill();
       ctx.fillStyle = healthRatio > .35 ? '#4fe3c1' : '#ff6b83';
-      ctx.fillRect(cx - barW / 2, cy + bh * .68, barW * healthRatio, 3);
+      roundedRect(ctx, w / 2 - barW / 2, top + 18, barW * healthRatio, 3, 2);
+      ctx.fill();
     }
+
+    const slotCount = placeholder ? 4 : (base?.level === 3 ? 8 : base?.level === 2 ? 6 : 4);
+    const installed = new Map((base?.modules || []).map(module => [module.slotId, module]));
+    layout.slots.slice(0, slotCount).forEach(slot => {
+      const module = installed.get(slot.id);
+      this.drawSlot(ctx, slot, module?.type || null, now, module?.production || null);
+    });
     ctx.restore();
   }
 
-  drawSlot(ctx, slot, moduleType, now = 0) {
+  drawSlot(ctx, slot, moduleType, now = 0, production = null) {
     ctx.save();
     if (!moduleType) {
       ctx.fillStyle = 'rgba(5, 16, 40, .9)';
@@ -339,6 +318,13 @@ export class ArenaRenderer {
       ctx.fillStyle = '#2e2857'; ctx.strokeStyle = '#b69bff'; ctx.lineWidth = 1.2;
       roundedRect(ctx, slot.x - slot.radius, slot.y - slot.radius * .75, slot.radius * 2, slot.radius * 1.5, 4); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = '#cbbdff'; ctx.beginPath(); ctx.moveTo(slot.x - 5, slot.y); ctx.lineTo(slot.x + 5, slot.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(slot.x - 3, slot.y - 4); ctx.lineTo(slot.x - 3, slot.y + 4); ctx.moveTo(slot.x + 3, slot.y - 4); ctx.lineTo(slot.x + 3, slot.y + 4); ctx.stroke();
+      if (production) {
+        const ratio = production.totalMs > 0 ? clamp(1 - production.remainingMs / production.totalMs, 0, 1) : 0;
+        ctx.strokeStyle = production.waitingForCapacity ? '#ffc56f' : '#d7c4ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(slot.x, slot.y, slot.radius + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio); ctx.stroke();
+      }
     }
     ctx.restore();
   }
