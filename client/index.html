@@ -91,8 +91,8 @@
           <div class="top-metric"><span id="opponent-label">ВРАГ</span><strong id="opponent-hp-value">1000</strong></div>
           <div class="meter"><span id="opponent-hp-fill"></span></div>
         </div>
-        <div class="energy-block"><span class="energy-icon">✦</span><strong id="energy-value">200</strong><small>ЭНЕРГИЯ</small></div>
-        <div class="level-block"><small>УР.</small><strong id="level-value">1</strong></div>
+        <div class="energy-block"><span class="energy-icon">✦</span><strong id="energy-value">200</strong><small>ЭНЕРГИЯ</small><em id="generation-value">+5/С</em></div>
+        <button id="upgrade-button" class="level-block upgrade-button" aria-label="Улучшить базу"><small>УР.</small><strong id="level-value">1</strong><span>↑</span></button>
       </header>
 
       <div class="arena-wrap">
@@ -105,21 +105,7 @@
         </div>
       </div>
 
-      <section class="command-panel">
-        <div class="panel-heading">
-          <div><span class="eyebrow">КОМАНДОВАНИЕ</span><strong>ПРОИЗВОДСТВО ФЛОТА</strong></div>
-          <div class="production-state" id="production-state">АНГАР ГОТОВ</div>
-        </div>
-        <div class="ship-actions">
-          <button class="ship-button" data-ship="fighter"><span class="ship-symbol fighter-symbol">▲</span><span class="ship-name">Истребитель</span><small>60 ✦ · 3с</small></button>
-          <button class="ship-button" data-ship="bomber"><span class="ship-symbol bomber-symbol">◆</span><span class="ship-name">Бомбардировщик</span><small>110 ✦ · 6.2с</small></button>
-          <button class="ship-button" data-ship="interceptor"><span class="ship-symbol interceptor-symbol">➤</span><span class="ship-name">Перехватчик</span><small>90 ✦ · 4.5с</small></button>
-        </div>
-        <div class="panel-footer">
-          <span id="generation-value">+5 ЭНЕРГИИ/С</span>
-          <button id="upgrade-button" class="upgrade-button">УЛУЧШИТЬ БАЗУ <span id="upgrade-cost">300 ✦</span></button>
-        </div>
-      </section>
+
     </section>
 
     <section id="result-screen" class="screen menu-screen result-screen">
@@ -142,7 +128,19 @@
         <button class="module-option" data-module="ballistic"><span class="module-icon ballistic-icon">⊕</span><span><strong>Баллистическая пушка</strong><small>Средний урон · 100 ✦</small></span><b>УСТАНОВИТЬ</b></button>
         <button class="module-option" data-module="laser"><span class="module-icon laser-icon">⌁</span><span><strong>Лазерная установка</strong><small>Большая дальность · 150 ✦</small></span><b>УСТАНОВИТЬ</b></button>
         <button class="module-option" data-module="reactor"><span class="module-icon reactor-icon">✦</span><span><strong>Энергогенератор</strong><small>+3 энергии/с · 120 ✦</small></span><b>УСТАНОВИТЬ</b></button>
-        <button class="module-option" data-module="hangar"><span class="module-icon hangar-icon">▦</span><span><strong>Ускоренный ангар</strong><small>Производство быстрее · 180 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+        <button class="module-option" data-module="hangar"><span class="module-icon hangar-icon">▦</span><span><strong>Ангар</strong><small>Отдельный модуль производства · 180 ✦</small></span><b>УСТАНОВИТЬ</b></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hangar-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="hangar-modal-title">
+    <div class="modal-card">
+      <div class="modal-heading"><div><p class="eyebrow">ПРОИЗВОДСТВО ФЛОТА</p><h3 id="hangar-modal-title">АНГАР</h3></div><button class="icon-button close-modal" id="close-hangar-modal" aria-label="Закрыть">×</button></div>
+      <p id="hangar-production-state" class="hangar-production-state">АНГАР СВОБОДЕН · ВЫБЕРИТЕ КОРАБЛЬ</p>
+      <div class="module-options hangar-options">
+        <button class="module-option" data-hangar-ship="fighter"><span class="module-icon ship-fighter-icon">▲</span><span><strong>Истребитель</strong><small>60 ✦ · 3с</small></span><b>СОБРАТЬ</b></button>
+        <button class="module-option" data-hangar-ship="bomber"><span class="module-icon ship-bomber-icon">◆</span><span><strong>Бомбардировщик</strong><small>110 ✦ · 6,2с</small></span><b>СОБРАТЬ</b></button>
+        <button class="module-option" data-hangar-ship="interceptor"><span class="module-icon ship-interceptor-icon">➤</span><span><strong>Перехватчик</strong><small>90 ✦ · 4,5с</small></span><b>СОБРАТЬ</b></button>
       </div>
     </div>
   </div>
