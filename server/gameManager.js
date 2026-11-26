@@ -163,9 +163,10 @@ class GameManager {
     const opposingBase = state.bases[1 - playerIndex];
     const enemyPlayer = game.room.players[1 - playerIndex];
     const transformEntity = (entity) => ({ ...entity, y: transformY(playerIndex, entity.y) });
-    const transformEffect = (effect) => ({ ...effect, y: transformY(playerIndex, effect.y) });
+    const transformEffect = (effect) => ({ ...effect, y: transformY(playerIndex, effect.y), friendly: typeof effect.owner === 'number' ? effect.owner === playerIndex : undefined });
     const transformBeam = (beam) => ({
       ...beam,
+      friendly: typeof beam.owner === 'number' ? beam.owner === playerIndex : undefined,
       y1: transformY(playerIndex, beam.y1),
       y2: transformY(playerIndex, beam.y2)
     });
@@ -205,7 +206,8 @@ class GameManager {
         y: transformY(playerIndex, ship.y),
         hp: ship.hp,
         maxHp: ship.maxHp,
-        targetId: ship.targetId
+        targetId: ship.targetId,
+        intercepted: Boolean(ship.interceptedBy)
       })),
       projectiles: state.projectiles.map(projectile => ({
         id: projectile.id,

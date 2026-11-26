@@ -28,8 +28,8 @@ function getSlotPosition(playerIndex, slotIndex) {
   return { x: 0.5 + dx, y: getBaseY(playerIndex) + worldOffset };
 }
 
-function pushEffect(state, type, x, y, duration = 550) {
-  state.effects.push({ id: `fx-${state.nextEntityId++}`, type, x, y, age: 0, duration });
+function pushEffect(state, type, x, y, duration = 550, owner = null) {
+  state.effects.push({ id: `fx-${state.nextEntityId++}`, type, x, y, age: 0, duration, owner });
 }
 
 function aliveShipCount(state, owner) {
@@ -108,6 +108,7 @@ function updateBaseWeapons(state, base, owner, dt) {
       damageShip(state, target, spec.damage, origin.x, origin.y);
       state.beams.push({
         id: `beam-${state.nextEntityId++}`,
+        owner,
         x1: origin.x, y1: origin.y,
         x2: target.x, y2: target.y,
         age: 0, duration: 240
@@ -138,80 +139,111 @@ function updateProjectiles(state, dt) {
 }
 
 function updateShips(state, dt) {
-  const alive = state.ships.filter(ship => ship.hp > 0 && !ship.delivered);
-  const lockedTargets = new Set();
+  const livingShips = state.ships.filter(ship => ship.hp > 0 && !ship.delivered);
 
-  // Interceptors are the only ships that can pin an enemy in place.
-  // Their target remains stationary while the interceptor engages it.
-  for (const ship of alive.filter(item => item.type === 'interceptor')) {
-    const spec = CONFIG.ships[ship.type];
-    ship.attackCooldown = Math.max(0, ship.attackCooldown - dt);
-    const target = getEnemyShips(state, ship.owner)
-      .map(enemy => ({ enemy, d: distance(ship, enemy) }))
-      .filter(item => item.d <= spec.shipRange)
-      .sort((a, b) => a.d - b.d)[0]?.enemy || null;
+  // Interception locks are rebuilt authoritatively every tick. This automatically
+  // releases a ship as soon as its interceptor is destroyed or loses its target.
+  for (const ship of livingShips) ship.interceptedBy = null;
 
+  const interceptors = livingShips
+    .filter(ship => ship.type === 'interceptor')
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  for (const interceptor of interceptors) {
+    const spec = CONFIG.ships.interceptor;
+    let target = livingShips.find(enemy => enemy.id === interceptor.targetId && enemy.owner !== interceptor.owner && enemy.hp > 0);
+    if (target && (distance(interceptor, target) > spec.shipRange || target.interceptedBy)) target = null;
     if (!target) {
-      ship.targetId = null;
-      continue;
+      target = livingShips
+        .filter(enemy => enemy.owner !== interceptor.owner && enemy.hp > 0 && !enemy.interceptedBy)
+        .map(enemy => ({ enemy, d: distance(interceptor, enemy) }))
+        .filter(item => item.d <= spec.shipRange)
+        .sort((a, b) => a.d - b.d)[0]?.enemy || null;
     }
-    ship.targetId = target.id;
-    lockedTargets.add(target.id);
-    if (ship.attackCooldown <= 0) {
-      damageShip(state, target, spec.shipDamage, ship.x, ship.y);
-      ship.attackCooldown = spec.shipCooldown;
-    }
+    interceptor.targetId = target ? target.id : null;
+    if (target) target.interceptedBy = interceptor.id;
   }
 
-  for (const ship of alive) {
-    if (ship.type !== 'interceptor' || ship.hp <= 0 || ship.delivered || ship.targetId) continue;
+  for (const ship of livingShips) {
+    if (ship.hp <= 0 || ship.delivered) continue;
     const spec = CONFIG.ships[ship.type];
-    ship.y += ship.direction * spec.speed * dt;
-    ship.x = clamp(ship.x, 0.12, 0.88);
-    const reachedBase = ship.owner === 0
-      ? ship.y >= CONFIG.world.baseSeparation
-      : ship.y <= 0;
-    if (reachedBase) {
-      state.bases[1 - ship.owner].hp = Math.max(0, state.bases[1 - ship.owner].hp - spec.baseDamage);
-      pushEffect(state, 'base-hit', 0.5, ship.owner === 0 ? CONFIG.world.baseSeparation : 0, 520);
-      ship.delivered = true;
-    }
-  }
+    ship.attackCooldown = Math.max(0, (ship.attackCooldown || 0) - dt);
+    ship.baseCooldown = Math.max(0, (ship.baseCooldown || 0) - dt);
 
-  for (const ship of alive) {
-    if (ship.hp <= 0 || ship.delivered || ship.type === 'interceptor') continue;
-    const spec = CONFIG.ships[ship.type];
-    ship.attackCooldown = Math.max(0, ship.attackCooldown - dt);
-
-    const target = getEnemyShips(state, ship.owner)
-      .map(enemy => ({ enemy, d: distance(ship, enemy) }))
-      .filter(item => item.d <= spec.shipRange)
-      .sort((a, b) => a.d - b.d)[0]?.enemy || null;
-
-    if (target) {
-      ship.targetId = target.id;
-      if (ship.attackCooldown <= 0) {
-        damageShip(state, target, spec.shipDamage, ship.x, ship.y);
-        ship.attackCooldown = spec.shipCooldown;
+    // Interceptors stop beside a hostile ship and engage it. Their target is
+    // held in place until this interceptor dies or the target leaves range.
+    if (spec.behavior === 'intercept') {
+      const target = ship.targetId
+        ? state.ships.find(enemy => enemy.id === ship.targetId && enemy.hp > 0 && enemy.owner !== ship.owner)
+        : null;
+      if (target) {
+        if (ship.attackCooldown <= 0) {
+          damageShip(state, target, spec.shipDamage, ship.x, ship.y);
+          ship.attackCooldown = spec.shipCooldown;
+          pushEffect(state, 'muzzle', ship.x, ship.y, 140, ship.owner);
+          state.beams.push({
+            id: `beam-${state.nextEntityId++}`,
+            owner: ship.owner,
+            x1: ship.x, y1: ship.y,
+            x2: target.x, y2: target.y,
+            age: 0, duration: 190
+          });
+        }
+        continue;
       }
+      ship.targetId = null;
     } else {
       ship.targetId = null;
     }
 
-    // Fighters and bombers keep advancing while firing. Only a ship pinned
-    // by an enemy interceptor is prevented from moving.
-    if (!lockedTargets.has(ship.id)) {
-      ship.y += ship.direction * spec.speed * dt;
-      ship.x = clamp(ship.x, 0.12, 0.88);
+    // Any ship caught by an interceptor is immobilized, but its HP remains
+    // vulnerable to the interceptor and to base weapons.
+    if (ship.interceptedBy) continue;
+
+    const enemyBaseY = getBaseY(1 - ship.owner);
+
+    // Fighters are siege craft: they travel the full route, stop just short of
+    // the enemy base, and fire repeated shots until destroyed or the base falls.
+    if (spec.behavior === 'siege') {
+      const attackRange = Math.max(0.02, spec.baseAttackRange || 0.09);
+      const attackY = enemyBaseY - ship.direction * attackRange;
+      const reachedFiringPosition = ship.direction > 0
+        ? ship.y >= attackY
+        : ship.y <= attackY;
+      if (reachedFiringPosition) {
+        ship.y = attackY;
+        if (ship.baseCooldown <= 0) {
+          const enemyBase = state.bases[1 - ship.owner];
+          enemyBase.hp = Math.max(0, enemyBase.hp - spec.baseDamage);
+          ship.baseCooldown = spec.baseCooldown || 1.2;
+          pushEffect(state, 'base-hit', 0.5, enemyBaseY, 420, ship.owner);
+          pushEffect(state, 'muzzle', ship.x, ship.y, 150, ship.owner);
+          state.beams.push({
+            id: `beam-${state.nextEntityId++}`,
+            owner: ship.owner,
+            x1: ship.x, y1: ship.y,
+            x2: ship.x, y2: enemyBaseY,
+            age: 0, duration: 220
+          });
+        }
+        continue;
+      }
     }
 
-    const crossedEnemyBase = ship.owner === 0
-      ? ship.y >= CONFIG.world.baseSeparation
-      : ship.y <= 0;
-    if (crossedEnemyBase) {
+    // Bombers do not dogfight or stop to shoot. They keep flying and sacrifice
+    // themselves on impact, dealing their full collision damage exactly once.
+    ship.y += ship.direction * spec.speed * dt;
+    ship.x = clamp(ship.x, 0.12, 0.88);
+
+    const reachedEnemyBase = ship.direction > 0
+      ? ship.y >= enemyBaseY
+      : ship.y <= enemyBaseY;
+    if (reachedEnemyBase) {
       const enemyBase = state.bases[1 - ship.owner];
       enemyBase.hp = Math.max(0, enemyBase.hp - spec.baseDamage);
-      pushEffect(state, 'base-hit', 0.5, ship.owner === 0 ? CONFIG.world.baseSeparation : 0, 520);
+      pushEffect(state, 'base-hit', 0.5, enemyBaseY, 520, ship.owner);
+      if (spec.behavior === 'ram') {
+        pushEffect(state, 'explosion', ship.x, enemyBaseY, 700, ship.owner);
+      }
       ship.delivered = true;
     }
   }

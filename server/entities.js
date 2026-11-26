@@ -47,7 +47,8 @@ function makeShip(state, owner, type) {
     direction,
     attackCooldown: 0,
     baseCooldown: 0,
-    targetId: null
+    targetId: null,
+    interceptedBy: null
   };
 }
 
