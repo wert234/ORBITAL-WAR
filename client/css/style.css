@@ -165,3 +165,24 @@ button:active { transform: scale(.985); }
 @media (min-width: 700px) {
   .game-screen { width: min(100%, 520px); margin: 0 auto; border-left: 1px solid rgba(100,157,255,.12); border-right: 1px solid rgba(100,157,255,.12); }
 }
+
+
+/* Animated orbital menu and layered deep-space backdrop */
+.starfield::before { animation: star-drift-a 90s linear infinite; }
+.starfield::after { animation: star-drift-b 125s linear infinite; }
+.brand-orbit { animation: orbit-breathe 5s ease-in-out infinite, orbit-turn 28s linear infinite; }
+.brand-orbit::before { animation: orbit-ring 9s linear infinite; }
+.brand-orbit::after { animation: orbit-satellite 6s ease-in-out infinite; }
+.brand-block h1 { animation: title-glow 4.5s ease-in-out infinite; }
+.menu-actions button { transition: transform .22s ease, filter .22s ease, box-shadow .22s ease; }
+.menu-actions button:active { transform: scale(.975); filter: brightness(1.22); }
+@keyframes star-drift-a { from { background-position: 0 0; } to { background-position: 320px 640px; } }
+@keyframes star-drift-b { from { background-position: 30px 50px; } to { background-position: -470px 420px; } }
+@keyframes orbit-breathe { 0%,100% { box-shadow: 0 0 38px rgba(62,141,255,.18), inset 0 0 24px rgba(62,141,255,.12); } 50% { box-shadow: 0 0 58px rgba(62,141,255,.36), inset 0 0 32px rgba(62,141,255,.22); } }
+@keyframes orbit-turn { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes orbit-ring { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes orbit-satellite { 0%,100% { transform: translate(0,0); } 50% { transform: translate(5px,-4px); } }
+@keyframes title-glow { 0%,100% { text-shadow: 0 0 12px rgba(85,228,255,.12); } 50% { text-shadow: 0 0 24px rgba(85,228,255,.38); } }
+@media (prefers-reduced-motion: reduce) {
+  .starfield::before, .starfield::after, .brand-orbit, .brand-orbit::before, .brand-orbit::after, .brand-block h1 { animation: none !important; }
+}
