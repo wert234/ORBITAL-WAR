@@ -73,7 +73,7 @@
       </div>
       <div class="settings-list">
         <label class="setting-row"><span><strong>Звуковые эффекты</strong><small>Кнопки и игровые события</small></span><input type="checkbox" id="sound-toggle"><i></i></label>
-        <label class="setting-row"><span><strong>Музыка</strong><small>Фоновый космический эмбиент</small></span><input type="checkbox" id="music-toggle"><i></i></label>
+        <label class="setting-row"><span><strong>Музыка</strong><small>Синтезируемый sci-fi космический фон</small></span><input type="checkbox" id="music-toggle"><i></i></label>
         <button class="setting-row fullscreen-row" id="fullscreen-toggle"><span><strong>Полный экран</strong><small>Когда поддерживается браузером</small></span><b>↗</b></button>
       </div>
       <p class="muted-caption">Настройки сохраняются на этом устройстве.</p>
@@ -92,7 +92,8 @@
           <div class="meter"><span id="opponent-hp-fill"></span></div>
         </div>
         <div class="energy-block"><span class="energy-icon">✦</span><strong id="energy-value">200</strong><small>ЭНЕРГИЯ</small><em id="generation-value">+5/С</em></div>
-        <button id="upgrade-button" class="level-block upgrade-button" aria-label="Улучшить базу"><small>УР.</small><strong id="level-value">1</strong><span>↑</span></button>
+        <div id="level-indicator" class="level-block" aria-label="Уровень базы"><small>УР.</small><strong id="level-value">1</strong></div>
+        <button id="pause-button" class="pause-button" aria-label="Пауза" title="Пауза">Ⅱ</button>
       </header>
 
       <div class="arena-wrap">
@@ -142,6 +143,23 @@
         <button class="module-option" data-hangar-ship="bomber"><span class="module-icon ship-bomber-icon">◆</span><span><strong>Бомбардировщик</strong><small>110 ✦ · 6,2с</small></span><b>СОБРАТЬ</b></button>
         <button class="module-option" data-hangar-ship="interceptor"><span class="module-icon ship-interceptor-icon">➤</span><span><strong>Перехватчик</strong><small>90 ✦ · 4,5с</small></span><b>СОБРАТЬ</b></button>
       </div>
+    </div>
+  </div>
+
+  <div id="upgrade-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="upgrade-modal-title">
+    <div class="modal-card upgrade-card">
+      <div class="modal-heading"><div><p class="eyebrow">ГЛАВНЫЙ МОДУЛЬ</p><h3 id="upgrade-modal-title">ЯДРО БАЗЫ</h3></div><button class="icon-button close-modal" id="close-upgrade-modal" aria-label="Закрыть">×</button></div>
+      <p id="upgrade-description" class="upgrade-description">Уровень 1 → 2 · расширение базы и новые отсеки.</p>
+      <button id="upgrade-confirm" class="primary-button upgrade-confirm">УЛУЧШИТЬ БАЗУ · 300 ✦</button>
+    </div>
+  </div>
+
+  <div id="pause-modal" class="modal-backdrop pause-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pause-modal-title">
+    <div class="modal-card pause-card">
+      <div class="modal-heading"><div><p class="eyebrow">ORBITAL WAR</p><h3 id="pause-modal-title">МЕНЮ БОЯ</h3></div><button class="icon-button close-modal" id="pause-close" aria-label="Закрыть">×</button></div>
+      <div id="pause-description" class="pause-description">Сетевая игра продолжается, пока открыто это меню.</div>
+      <button id="pause-resume" class="primary-button pause-action">ПРОДОЛЖИТЬ</button>
+      <button id="pause-surrender" class="surrender-button pause-action">СДАТЬСЯ</button>
     </div>
   </div>
 
