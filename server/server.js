@@ -16,6 +16,10 @@ const app = express();
 app.disable('x-powered-by');
 app.get('/health', (_req, res) => res.json({ ok: true, name: 'ORBITAL WAR', time: new Date().toISOString() }));
 app.get('/api/config', (_req, res) => res.json({ economy: CONFIG.economy, base: CONFIG.base, modules: CONFIG.modules, ships: CONFIG.ships }));
+app.use('/resources', express.static(path.join(__dirname, '..', 'resources'), {
+  maxAge: 0,
+  setHeaders: response => response.setHeader('Cache-Control', 'no-cache')
+}));
 app.use(express.static(CLIENT_DIR, {
   extensions: ['html'],
   maxAge: 0,
