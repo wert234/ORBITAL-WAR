@@ -44,7 +44,7 @@ export class ArenaRenderer {
     this.shipSprites = {};
     for (const type of ['fighter', 'bomber', 'interceptor']) {
       const image = new Image();
-      image.src = `/img/${type}.png`;
+      image.src = `/resources/img/${type}.png`;
       this.shipSprites[type] = image;
     }
     this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
