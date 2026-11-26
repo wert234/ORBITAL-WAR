@@ -20,6 +20,8 @@ export class GameUI {
     this.selectedHangarSlotId = null;
     this.modal = document.getElementById('slot-modal');
     this.hangarModal = document.getElementById('hangar-modal');
+    this.upgradeModal = document.getElementById('upgrade-modal');
+    this.pauseModal = document.getElementById('pause-modal');
     this.bindControls();
     this.populateCatalog();
   }
@@ -43,6 +45,10 @@ export class GameUI {
   bindControls() {
     this.canvas.addEventListener('pointerup', event => {
       if (!this.state?.base) return;
+      if (this.renderer.hitTestCore(event.clientX, event.clientY)) {
+        this.openUpgradeModal();
+        return;
+      }
       const slot = this.renderer.hitTestSlot(event.clientX, event.clientY, this.state.base.slotCount);
       if (!slot) return;
       const installed = this.state.base.modules.find(module => module.slotId === slot.id);
@@ -72,9 +78,26 @@ export class GameUI {
       });
     });
 
-    document.getElementById('upgrade-button').addEventListener('click', () => {
+    document.getElementById('upgrade-confirm').addEventListener('click', () => {
+      if (!this.state?.base || this.state.base.level >= 3) return;
       this.audio.play('click');
-      this.network.command('upgrade');
+      if (this.network.command('upgrade')) this.closeUpgradeModal();
+    });
+    document.getElementById('close-upgrade-modal').addEventListener('click', () => this.closeUpgradeModal());
+    this.upgradeModal.addEventListener('pointerdown', event => {
+      if (event.target === this.upgradeModal) this.closeUpgradeModal();
+    });
+
+    document.getElementById('pause-button').addEventListener('click', () => {
+      if (this.pauseModal.classList.contains('hidden')) this.openPauseMenu();
+      else this.closePauseMenu();
+    });
+    document.getElementById('pause-close').addEventListener('click', () => this.closePauseMenu());
+    document.getElementById('pause-resume').addEventListener('click', () => this.closePauseMenu());
+    document.getElementById('pause-surrender').addEventListener('click', () => {
+      if (!this.network.isConnected()) return this.toast('Нет соединения с сервером. Сдаться сейчас не удалось.', 'error');
+      this.pauseModal.classList.add('hidden');
+      this.network.surrender();
     });
 
     document.querySelectorAll('[data-module]').forEach(button => {
@@ -94,6 +117,75 @@ export class GameUI {
     this.hangarModal.addEventListener('pointerdown', event => {
       if (event.target === this.hangarModal) this.closeHangarModal();
     });
+  }
+
+  openUpgradeModal() {
+    const base = this.state?.base;
+    if (!base) return;
+    const description = document.getElementById('upgrade-description');
+    const confirm = document.getElementById('upgrade-confirm');
+    const nextLevel = base.level + 1;
+    const spec = this.config?.base?.levels?.[base.level];
+    const cost = spec?.upgradeCost;
+
+    if (base.level >= 3 || !cost) {
+      description.textContent = 'Главное ядро достигло максимального уровня.';
+      confirm.textContent = 'МАКСИМАЛЬНЫЙ УРОВЕНЬ';
+      confirm.disabled = true;
+      confirm.classList.remove('unaffordable');
+    } else {
+      const nextSlots = this.config?.base?.levels?.[nextLevel]?.slots || base.slotCount;
+      description.textContent = `Уровень ${base.level} → ${nextLevel} · новые отсеки: ${nextSlots}. Стоимость: ${cost} ✦.`;
+      confirm.textContent = base.energy >= cost ? `УЛУЧШИТЬ БАЗУ · ${cost} ✦` : `НУЖНО ЕЩЁ ${Math.ceil(cost - base.energy)} ✦`;
+      confirm.disabled = !this.network.isConnected() || base.energy < cost;
+      confirm.classList.toggle('unaffordable', base.energy < cost);
+    }
+    this.upgradeModal.classList.remove('hidden');
+  }
+
+  closeUpgradeModal() {
+    this.upgradeModal.classList.add('hidden');
+  }
+
+  openPauseMenu() {
+    if (!this.state) return;
+    this.audio.play('click');
+    this.closeModuleModal();
+    this.closeHangarModal();
+    this.pauseModal.classList.remove('hidden');
+    const botMatch = Boolean(this.state.opponentIsBot);
+    document.getElementById('pause-description').textContent = botMatch
+      ? 'Останавливаем симуляцию. Производство, корабли и бой замрут до продолжения.'
+      : 'Это сетевая игра: меню откроется, но время матча и бой продолжатся.';
+    if (botMatch) this.network.setBotPaused(true);
+  }
+
+  closePauseMenu() {
+    if (this.pauseModal.classList.contains('hidden')) return;
+    this.audio.play('click');
+    const botMatch = Boolean(this.state?.opponentIsBot);
+    this.pauseModal.classList.add('hidden');
+    if (botMatch && this.network.isConnected()) this.network.setBotPaused(false);
+  }
+
+  setPaused(paused, accepted = true) {
+    if (!this.state?.opponentIsBot) return;
+    const description = document.getElementById('pause-description');
+    if (!accepted) {
+      description.textContent = 'Сервер не смог поставить матч на паузу. Проверь соединение.';
+      return;
+    }
+    description.textContent = paused
+      ? 'ПАУЗА АКТИВНА · производство, корабли и бой остановлены.'
+      : 'Симуляция снова работает. Удачи в бою!';
+    if (paused) this.pauseModal.classList.remove('hidden');
+  }
+
+  onMatchEnded() {
+    this.pauseModal.classList.add('hidden');
+    this.closeUpgradeModal();
+    this.closeModuleModal();
+    this.closeHangarModal();
   }
 
   openModuleModal() {
@@ -145,6 +237,10 @@ export class GameUI {
     this.state = state;
     this.renderer.setState(state);
     this.updateHud();
+    if (state.opponentIsBot && state.paused) {
+      this.pauseModal.classList.remove('hidden');
+      document.getElementById('pause-description').textContent = 'ПАУЗА АКТИВНА · производство, корабли и бой остановлены.';
+    }
   }
 
   updateHud() {
@@ -164,20 +260,10 @@ export class GameUI {
     const opponentLabel = document.getElementById('opponent-label');
     if (opponentLabel) opponentLabel.textContent = this.state.opponentIsBot ? 'БОТ' : 'ВРАГ';
 
-    const upgrade = document.getElementById('upgrade-button');
-    const upgradeCost = base.level < 3 ? this.config?.base?.levels?.[base.level]?.upgradeCost : null;
-    upgrade.querySelector('strong').textContent = base.level;
-    if (base.level >= 3) {
-      upgrade.disabled = true;
-      upgrade.classList.remove('unaffordable');
-      upgrade.title = 'Максимальный уровень базы';
-    } else {
-      upgrade.disabled = !this.network.isConnected();
-      upgrade.classList.toggle('unaffordable', base.energy < upgradeCost);
-      upgrade.title = `Улучшить базу · ${upgradeCost} ✦`;
-    }
+    document.getElementById('level-value').textContent = base.level;
 
     if (!this.modal.classList.contains('hidden')) this.openModuleModal();
+    if (!this.upgradeModal.classList.contains('hidden')) this.openUpgradeModal();
     if (!this.hangarModal.classList.contains('hidden') && this.selectedHangarSlotId) {
       const selected = base.modules.find(module => module.slotId === this.selectedHangarSlotId);
       if (selected?.type === 'hangar') this.openHangarModal(selected);
@@ -195,7 +281,7 @@ export class GameUI {
 
   setNetworkConnected(connected) {
     document.getElementById('connection-overlay').classList.toggle('hidden', connected);
-    document.querySelectorAll('[data-hangar-ship], #upgrade-button').forEach(button => {
+    document.querySelectorAll('[data-hangar-ship], #upgrade-confirm').forEach(button => {
       if (!connected) button.disabled = true;
     });
     if (connected && this.state) this.updateHud();
@@ -206,6 +292,8 @@ export class GameUI {
     this.renderer.setState(null);
     this.closeModuleModal();
     this.closeHangarModal();
+    this.closeUpgradeModal();
+    this.pauseModal.classList.add('hidden');
   }
 
   destroy() {

@@ -60,7 +60,7 @@ export class NetworkClient {
     const events = [
       'server:hello', 'room:created', 'room:joined', 'room:error', 'room:closed',
       'room:playerDisconnected', 'room:playerReconnected', 'room:rematchStatus',
-      'match:started', 'match:ended', 'game:state', 'command:result'
+      'match:started', 'match:ended', 'match:pauseState', 'game:state', 'command:result'
     ];
     events.forEach(eventName => this.socket.on(eventName, payload => {
       if (eventName === 'room:error' && payload?.code === 'SESSION_ACTIVE' && this.session && this.resumeRetries < 3) {
@@ -119,6 +119,14 @@ export class NetworkClient {
   leaveRoom() {
     if (this.socket?.connected) this.socket.emit('room:leave');
     this.clearSession();
+  }
+
+  surrender() {
+    if (this.socket?.connected) this.socket.emit('room:leave');
+  }
+
+  setBotPaused(paused) {
+    if (this.socket?.connected) this.socket.emit('match:pause', { paused: Boolean(paused) });
   }
 
   requestRematch() {

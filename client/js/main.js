@@ -56,10 +56,14 @@ function openResult(payload) {
   screen.classList.toggle('defeat', !won);
   document.getElementById('result-title').textContent = won ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
   document.getElementById('result-emblem').textContent = won ? '✦' : '×';
-  const forfeit = payload.reason === 'forfeit';
-  document.getElementById('result-subtitle').textContent = forfeit
-    ? (won ? 'Соперник не вернулся в бой.' : 'Соединение с матчем потеряно.')
-    : (won ? 'Вражеская база уничтожена.' : 'Твоя база пала. Перегруппируй флот.');
+  const resultReason = payload.reason;
+  if (resultReason === 'surrender') {
+    document.getElementById('result-subtitle').textContent = won ? 'Соперник сдался.' : 'Ты сдался. Матч завершён.';
+  } else if (resultReason === 'forfeit') {
+    document.getElementById('result-subtitle').textContent = won ? 'Соперник не вернулся в бой.' : 'Ты не вернулся в бой вовремя.';
+  } else {
+    document.getElementById('result-subtitle').textContent = won ? 'Вражеская база уничтожена.' : 'Твоя база пала. Перегруппируй флот.';
+  }
   document.getElementById('rematch-status').textContent = '';
   showScreen('result-screen');
 }
@@ -158,7 +162,9 @@ function wireNetworkEvents() {
   });
   network.on('room:closed', payload => {
     game?.reset();
-    showScreen('network-screen');
+    // Leaving from the result screen already returned the user to the main
+    // menu. A server-side room cleanup should not pull them back a level.
+    if (!document.getElementById('home-screen').classList.contains('active')) showScreen('network-screen');
     if (payload?.message) showToast(payload.message);
   });
   network.on('room:playerDisconnected', payload => {
@@ -190,7 +196,11 @@ function wireNetworkEvents() {
     if (result.ok) showToast(result.message || 'Команда выполнена.', 'success');
     else showToast(result.message || 'Команда отклонена.', 'error');
   });
-  network.on('match:ended', payload => openResult(payload));
+  network.on('match:pauseState', payload => game?.setPaused(payload.paused, payload.accepted));
+  network.on('match:ended', payload => {
+    game?.onMatchEnded();
+    openResult(payload);
+  });
 }
 
 async function boot() {

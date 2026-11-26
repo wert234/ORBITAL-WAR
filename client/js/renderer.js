@@ -24,6 +24,11 @@ export function getBaseLayout(width, height) {
     hullWidth,
     hullHeight,
     top,
+    core: {
+      x: width / 2,
+      y: top + hullHeight * 0.91,
+      radius: Math.max(22, Math.min(29, width * 0.07))
+    },
     slots: SLOT_OFFSETS.map(([dx, dy], index) => ({
       id: `s${index + 1}`,
       x: width * dx,
@@ -279,6 +284,57 @@ export class ArenaRenderer {
       const module = installed.get(slot.id);
       this.drawSlot(ctx, slot, module?.type || null, now, module?.production || null);
     });
+    this.drawMainCore(ctx, layout.core, base?.level || 1, now, placeholder);
+    ctx.restore();
+  }
+
+  drawMainCore(ctx, core, level, now = 0, placeholder = false) {
+    const pulse = 0.65 + (Math.sin(now * 0.0024) + 1) * 0.16;
+    const { x, y, radius } = core;
+    ctx.save();
+    ctx.shadowColor = '#5ce7ff';
+    ctx.shadowBlur = 14 + pulse * 10;
+    ctx.fillStyle = 'rgba(7, 20, 46, .98)';
+    ctx.strokeStyle = `rgba(103, 225, 255, ${0.7 + pulse * 0.25})`;
+    ctx.lineWidth = 1.5;
+    roundedRect(ctx, x - radius * 1.38, y - radius * 0.5, radius * 2.76, radius, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Four luminous conduits connect the command core to the base deck.
+    ctx.strokeStyle = 'rgba(88, 208, 255, .46)';
+    ctx.lineWidth = 2;
+    for (const direction of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(x + direction * radius * 1.15, y);
+      ctx.lineTo(x + direction * radius * 1.48, y);
+      ctx.stroke();
+    }
+
+    const coreGradient = ctx.createRadialGradient(x, y - 1, 1, x, y, radius * 0.55);
+    coreGradient.addColorStop(0, '#f1ffff');
+    coreGradient.addColorStop(0.34, '#85f1ff');
+    coreGradient.addColorStop(1, '#2377c7');
+    ctx.fillStyle = coreGradient;
+    ctx.shadowColor = '#71eaff';
+    ctx.shadowBlur = 12 + pulse * 9;
+    ctx.beginPath();
+    ctx.arc(x, y - 1, radius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = `rgba(164, 244, 255, ${0.42 + pulse * 0.3})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y - 1, radius * 0.58 + pulse * 1.6, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.font = '800 7px system-ui, sans-serif';
+    ctx.fillStyle = placeholder ? 'rgba(181, 215, 243, .74)' : '#b9efff';
+    ctx.fillText(`CORE ↑ · LV ${level}`, x, y - radius * 0.7);
     ctx.restore();
   }
 
@@ -485,6 +541,14 @@ export class ArenaRenderer {
     const y = clientY - rect.top;
     const layout = getBaseLayout(this.width, this.height);
     return layout.slots.slice(0, slotCount).find(slot => Math.hypot(x - slot.x, y - slot.y) <= slot.radius + 8) || null;
+  }
+
+  hitTestCore(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const core = getBaseLayout(this.width, this.height).core;
+    return Math.hypot(x - core.x, y - core.y) <= core.radius * 1.15;
   }
 
   destroy() {
