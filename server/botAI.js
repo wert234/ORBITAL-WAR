@@ -31,10 +31,22 @@ function runBotAI(game, now = Date.now()) {
   const myShips = livingShips(state, 1);
   const enemyShips = livingShips(state, 0);
   let slotId = freeSlot(base);
+
+  // Prioritize installing a real hangar so bot matches begin testing ship
+  // movement and combat early instead of waiting for a defensive/economy build.
+  let hangars = base.modules.filter(module => module.type === 'hangar');
+  if (!hangars.length && slotId && base.energy >= CONFIG.modules.hangar.cost) {
+    const result = issue(game, 'install', { slotId, moduleType: 'hangar' });
+    if (result.ok) {
+      game.botAI.decisions += 1;
+      slotId = freeSlot(base);
+      hangars = base.modules.filter(module => module.type === 'hangar');
+    }
+  }
+
   let weaponCount = base.modules.filter(module => CONFIG.modules[module.type]?.category === 'weapon').length;
 
-  // Establish a defensive gun early. It uses the same module slot, energy,
-  // cooldown, targeting and damage rules as a human-built turret.
+  // Build defense through the same validated command handler as humans.
   if (weaponCount === 0 && slotId && base.energy >= CONFIG.modules.ballistic.cost) {
     const result = issue(game, 'install', { slotId, moduleType: 'ballistic' });
     if (result.ok) {
@@ -44,7 +56,6 @@ function runBotAI(game, now = Date.now()) {
     }
   }
 
-  // Add a second gun only when there is something to defend against.
   if (weaponCount < 2 && enemyShips.length >= 2 && slotId && base.energy >= CONFIG.modules.ballistic.cost) {
     const result = issue(game, 'install', { slotId, moduleType: 'ballistic' });
     if (result.ok) {
@@ -54,10 +65,8 @@ function runBotAI(game, now = Date.now()) {
     }
   }
 
-  // Invest in energy production once the first defence and some fleet are
-  // online. The economy module is also placed through the normal command path.
   const reactorCount = base.modules.filter(module => module.type === 'reactor').length;
-  if (reactorCount === 0 && slotId && base.energy >= 150) {
+  if (reactorCount === 0 && slotId && base.energy >= CONFIG.modules.reactor.cost + 30) {
     const result = issue(game, 'install', { slotId, moduleType: 'reactor' });
     if (result.ok) {
       game.botAI.decisions += 1;
@@ -65,7 +74,6 @@ function runBotAI(game, now = Date.now()) {
     }
   }
 
-  // Expand the same base levels and slot capacity available to a human player.
   if (base.level < 3) {
     const upgradeCost = CONFIG.base.levels[base.level].upgradeCost;
     if (base.energy >= upgradeCost + 100) {
@@ -77,14 +85,11 @@ function runBotAI(game, now = Date.now()) {
     }
   }
 
-  // Keep the shared production queue moving. The bot uses the same costs,
-  // build timers, queue cap and fleet cap as the human player.
-  const queue = base.productionQueue || (base.production ? [base.production] : []);
-  if (queue.length >= Math.min(3, CONFIG.MAX_PRODUCTION_QUEUE)) return;
-  // Save the next 150 energy for the first reactor instead of spending every
-  // small surplus on another ship and keeping the bot's economy stagnant.
-  if (!base.modules.some(module => module.type === 'reactor') && freeSlot(base) && base.energy < 150) return;
-  if (myShips.length + queue.length >= CONFIG.MAX_SHIPS_PER_PLAYER) return;
+  // Each installed hangar owns one independent build slot.
+  const freeHangar = hangars.find(module => !module.production);
+  if (!freeHangar) return;
+  const activeProduction = hangars.filter(module => module.production).length;
+  if (myShips.length + activeProduction >= CONFIG.MAX_SHIPS_PER_PLAYER) return;
 
   const orderNumber = game.botAI.shipOrders || 0;
   let shipType = 'fighter';
@@ -96,7 +101,7 @@ function runBotAI(game, now = Date.now()) {
     shipType = 'bomber';
   }
 
-  const result = issue(game, 'produce', { shipType });
+  const result = issue(game, 'produce', { shipType, hangarSlotId: freeHangar.slotId });
   if (result.ok) {
     game.botAI.decisions += 1;
     game.botAI.shipOrders = orderNumber + 1;

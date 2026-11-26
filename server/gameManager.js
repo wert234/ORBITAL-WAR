@@ -6,7 +6,10 @@ const { applyCommand, stepGame, moduleSlotCount } = require('./gameLogic');
 const { runBotAI } = require('./botAI');
 
 function transformY(playerIndex, y) {
-  return playerIndex === 0 ? y : 1 - y;
+  const baseOffset = CONFIG.world.viewportBaseY;
+  return playerIndex === 0
+    ? baseOffset - y
+    : baseOffset - (CONFIG.world.baseSeparation - y);
 }
 
 class GameManager {
@@ -167,8 +170,11 @@ class GameManager {
         maxEnergy: CONFIG.economy.maxEnergy,
         level: ownBase.level,
         slotCount: require('./gameLogic').moduleSlotCount(ownBase.level),
-        modules: ownBase.modules.map(module => ({ slotId: module.slotId, type: module.type })),
-        productionQueue: (ownBase.productionQueue || []).map(item => ({ ...item })),
+        modules: ownBase.modules.map(module => ({
+          slotId: module.slotId,
+          type: module.type,
+          production: module.production ? { ...module.production } : null
+        })),
         generation: CONFIG.economy.baseGenerationPerSecond + ownBase.modules.filter(module => module.type === 'reactor').length * CONFIG.economy.reactorBonusPerSecond
       },
       ships: state.ships.map(ship => ({

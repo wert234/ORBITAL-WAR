@@ -10,9 +10,7 @@ function makeBase(playerIndex) {
     level: 1,
     energy: CONFIG.economy.startingEnergy,
     modules: [],
-    productionQueue: [],
-    // A built-in hangar makes ship production available from the beginning.
-    // A purchased hangar module later shortens build time.
+    // Each installed hangar owns its own independent production slot.
     nextProductionId: 1
   };
 }
@@ -35,15 +33,15 @@ function makeGameState() {
 
 function makeShip(state, owner, type) {
   const spec = CONFIG.ships[type];
-  const direction = owner === 0 ? -1 : 1;
-  const baseY = owner === 0 ? 0.855 : 0.145;
+  const direction = owner === 0 ? 1 : -1;
+  const baseY = owner === 0 ? 0 : CONFIG.world.baseSeparation;
   const jitter = (Math.random() - 0.5) * 0.12;
   return {
     id: `sh-${state.nextEntityId++}`,
     owner,
     type,
     x: Math.max(0.16, Math.min(0.84, 0.5 + jitter)),
-    y: baseY + direction * 0.13,
+    y: baseY + direction * 0.17,
     hp: spec.maxHp,
     maxHp: spec.maxHp,
     direction,

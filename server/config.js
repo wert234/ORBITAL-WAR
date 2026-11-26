@@ -8,7 +8,13 @@ module.exports = Object.freeze({
   RECONNECT_GRACE_MS: 30_000,
   ROOM_IDLE_MS: 10 * 60_000,
   MAX_SHIPS_PER_PLAYER: 30,
-  MAX_PRODUCTION_QUEUE: 5,
+  world: {
+    // Each home base sits near the bottom of its owner's viewport. The two
+    // viewports meet at the center of the route, so ships leave one screen
+    // and enter the opponent's screen from its top edge.
+    viewportBaseY: 0.855,
+    baseSeparation: 1.71
+  },
   MAX_COMMANDS_PER_SECOND: 10,
   MAX_COMMAND_CACHE: 300,
 
@@ -57,10 +63,9 @@ module.exports = Object.freeze({
       generationBonus: 3
     },
     hangar: {
-      name: 'Ускоренный ангар',
+      name: 'Ангар',
       category: 'production',
-      cost: 180,
-      buildTimeMultiplier: 0.82
+      cost: 180
     }
   },
 

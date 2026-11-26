@@ -11,21 +11,21 @@ function moduleSlotCount(level) {
 }
 
 function getBaseY(playerIndex) {
-  return playerIndex === 0 ? 0.855 : 0.145;
+  return playerIndex === 0 ? 0 : CONFIG.world.baseSeparation;
 }
 
 function getSlotPosition(playerIndex, slotIndex) {
-  // Coordinates are in the shared server arena. The client applies its own
-  // perspective transform, so each player's station is always at the bottom.
+  // Coordinates are in the shared two-screen route. Each client sees its own
+  // base at the bottom through the perspective transform in GameManager.
   const positions = [
-    [-0.105, -0.055], [0.105, -0.055],
-    [-0.105, 0.018], [0.105, 0.018],
-    [-0.185, -0.018], [0.185, -0.018],
-    [-0.045, 0.072], [0.045, 0.072]
+    [-0.38, -0.023], [-0.127, -0.023], [0.127, -0.023], [0.38, -0.023],
+    [-0.38, 0.086], [-0.127, 0.086], [0.127, 0.086], [0.38, 0.086]
   ];
   const [dx, dy] = positions[slotIndex] || [0, 0];
-  const mirror = playerIndex === 0 ? 1 : -1;
-  return { x: 0.5 + dx, y: getBaseY(playerIndex) + dy * mirror };
+  // Slot offsets are authored in the owner's screen coordinates. The shared
+  // world axis runs from player 0's base towards player 1's base.
+  const worldOffset = playerIndex === 0 ? -dy : dy;
+  return { x: 0.5 + dx, y: getBaseY(playerIndex) + worldOffset };
 }
 
 function pushEffect(state, type, x, y, duration = 550) {
@@ -51,24 +51,27 @@ function damageShip(state, target, amount, sourceX, sourceY) {
 }
 
 function updateProduction(state, base, owner, dtMs) {
-  const queue = base.productionQueue || (base.production ? [base.production] : []);
-  if (!queue.length) return;
+  const hangars = base.modules.filter(module => module.type === 'hangar' && module.production);
+  for (const hangar of hangars) {
+    const production = hangar.production;
+    production.remainingMs = Math.max(0, production.remainingMs - dtMs);
+    if (production.remainingMs > 0) continue;
 
-  const production = queue[0];
-  production.remainingMs = Math.max(0, production.remainingMs - dtMs);
-  if (production.remainingMs > 0) return;
+    if (aliveShipCount(state, owner) >= CONFIG.MAX_SHIPS_PER_PLAYER) {
+      production.remainingMs = 0;
+      production.waitingForCapacity = true;
+      continue;
+    }
 
-  if (aliveShipCount(state, owner) >= CONFIG.MAX_SHIPS_PER_PLAYER) {
-    production.remainingMs = 0;
-    production.waitingForCapacity = true;
-    return;
+    state.ships.push(makeShip(state, owner, production.type));
+    const launchY = owner === 0 ? 0.17 : CONFIG.world.baseSeparation - 0.17;
+    pushEffect(state, 'launch', 0.5, launchY, 520);
+    hangar.production = null;
   }
+}
 
-  state.ships.push(makeShip(state, owner, production.type));
-  pushEffect(state, 'launch', 0.5, owner === 0 ? 0.725 : 0.275, 520);
-  queue.shift();
-  base.productionQueue = queue;
-  base.production = null;
+function activeProductionCount(base) {
+  return base.modules.reduce((count, module) => count + (module.type === 'hangar' && module.production ? 1 : 0), 0);
 }
 
 function updateBaseWeapons(state, base, owner, dt) {
@@ -160,13 +163,16 @@ function updateShips(state, dt) {
     ship.y += ship.direction * spec.speed * dt;
     ship.x = clamp(ship.x, 0.12, 0.88);
 
-    // There is no rendered enemy station. A ship scores its base hit only
-    // after it flies completely beyond the far edge of the arena.
-    const crossedFarEdge = ship.owner === 0 ? ship.y <= -0.015 : ship.y >= 1.015;
-    if (crossedFarEdge) {
+    // The shared route is two home-view lengths long. A ship first leaves
+    // its owner's viewport, enters the opponent's viewport at the top, and
+    // only then reaches the opponent's base.
+    const crossedEnemyBase = ship.owner === 0
+      ? ship.y >= CONFIG.world.baseSeparation
+      : ship.y <= 0;
+    if (crossedEnemyBase) {
       const enemyBase = state.bases[1 - ship.owner];
       enemyBase.hp = Math.max(0, enemyBase.hp - spec.baseDamage);
-      pushEffect(state, 'base-hit', 0.5, ship.owner === 0 ? 0 : 1, 520);
+      pushEffect(state, 'base-hit', 0.5, ship.owner === 0 ? CONFIG.world.baseSeparation : 0, 520);
       ship.delivered = true;
     }
   }
@@ -211,33 +217,25 @@ function applyCommand(state, playerIndex, command) {
 
   if (action === 'produce') {
     const type = String(data.shipType || '');
+    const hangarSlotId = String(data.hangarSlotId || data.slotId || '');
     const spec = CONFIG.ships[type];
     if (!spec) return fail('UNKNOWN_SHIP', 'Неизвестный тип корабля.');
-    const queue = base.productionQueue || (base.production ? [base.production] : []);
-    if (queue.length >= CONFIG.MAX_PRODUCTION_QUEUE) {
-      return fail('PRODUCTION_QUEUE_FULL', `Очередь заполнена: максимум ${CONFIG.MAX_PRODUCTION_QUEUE} кораблей.`);
-    }
-    if (aliveShipCount(state, playerIndex) + queue.length >= CONFIG.MAX_SHIPS_PER_PLAYER) {
-      return fail('FLEET_LIMIT', 'Достигнут лимит кораблей с учётом очереди производства.');
+    const hangar = base.modules.find(item => item.slotId === hangarSlotId && item.type === 'hangar');
+    if (!hangar) return fail('HANGAR_NOT_FOUND', 'Сначала установите ангар и выберите его.');
+    if (hangar.production) return fail('HANGAR_BUSY', 'Этот ангар уже собирает корабль.');
+    if (aliveShipCount(state, playerIndex) + activeProductionCount(base) >= CONFIG.MAX_SHIPS_PER_PLAYER) {
+      return fail('FLEET_LIMIT', 'Достигнут лимит кораблей с учётом производства.');
     }
     if (base.energy < spec.cost) return fail('NOT_ENOUGH_ENERGY', 'Недостаточно энергии.');
     base.energy -= spec.cost;
-    const hangarModules = base.modules.filter(item => item.type === 'hangar').length;
-    const multiplier = Math.max(0.55, Math.pow(CONFIG.modules.hangar.buildTimeMultiplier, hangarModules));
-    const totalMs = Math.round(spec.buildMs * multiplier);
-    queue.push({
+    hangar.production = {
       id: base.nextProductionId++,
       type,
-      remainingMs: totalMs,
-      totalMs,
+      remainingMs: spec.buildMs,
+      totalMs: spec.buildMs,
       waitingForCapacity: false
-    });
-    base.productionQueue = queue;
-    base.production = null;
-    return {
-      ok: true,
-      message: queue.length === 1 ? `Начато производство: ${spec.name}.` : `${spec.name} добавлен в очередь (${queue.length}/${CONFIG.MAX_PRODUCTION_QUEUE}).`
     };
+    return { ok: true, message: `Ангар начал сборку: ${spec.name}.` };
   }
 
   return fail('UNKNOWN_ACTION', 'Неизвестное действие.');
@@ -260,7 +258,7 @@ function stepGame(state, dt) {
   updateShips(state, dt);
   updateProjectiles(state, dt);
 
-  state.ships = state.ships.filter(ship => ship.hp > 0 && !ship.delivered && ship.y >= -0.04 && ship.y <= 1.04);
+  state.ships = state.ships.filter(ship => ship.hp > 0 && !ship.delivered && ship.y >= -0.04 && ship.y <= CONFIG.world.baseSeparation + 0.04);
   state.effects = state.effects.filter(effect => {
     effect.age += dtMs;
     return effect.age < effect.duration;
