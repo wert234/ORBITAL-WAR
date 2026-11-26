@@ -42,17 +42,27 @@ class GameManager {
       state,
       commandCaches: [new Map(), new Map()],
       commandTimes: [[], []],
+      paused: false,
       botAI: room.isBotMatch ? { nextThinkAt: Date.now() + 500, decisions: 0, shipOrders: 0 } : null
     });
     this.broadcastRoom(room.code, true);
   }
 
-  finishByForfeit(room, missingPlayerIndex) {
+  setBotPaused(room, playerIndex, paused) {
+    const game = this.games.get(room.code);
+    if (!room.isBotMatch || room.status !== 'active' || playerIndex !== 0 || !game || game.state.status !== 'active') return false;
+    game.paused = Boolean(paused);
+    room.updatedAt = Date.now();
+    this.broadcastRoom(room.code, true);
+    return true;
+  }
+
+  finishByForfeit(room, missingPlayerIndex, reason = 'forfeit') {
     const game = this.games.get(room.code);
     if (!game || game.state.status !== 'active') return;
     game.state.status = 'ended';
     game.state.winnerIndex = 1 - missingPlayerIndex;
-    this.notifyEnd(game, 'forfeit');
+    this.notifyEnd(game, reason);
   }
 
   notifyEnd(game, reason = 'base-destroyed') {
@@ -86,6 +96,15 @@ class GameManager {
       return;
     }
 
+    if (game.paused) {
+      this.replyCommand(room, playerIndex, requestId, {
+        ok: false,
+        code: 'MATCH_PAUSED',
+        message: 'Матч на паузе. Нажмите «Продолжить», чтобы снова управлять базой.'
+      }, game);
+      return;
+    }
+
     const now = Date.now();
     const times = game.commandTimes[playerIndex];
     while (times.length && now - times[0] > 1000) times.shift();
@@ -113,7 +132,7 @@ class GameManager {
     const dt = Math.min(0.1, Math.max(0.001, (now - this.lastStepAt) / 1000));
     this.lastStepAt = now;
     for (const [code, game] of this.games) {
-      if (game.state.status === 'active') {
+      if (game.state.status === 'active' && !game.paused) {
         if (game.botAI) runBotAI(game, now);
         stepGame(game.state, dt);
         if (game.state.status === 'ended') {
@@ -156,6 +175,7 @@ class GameManager {
     return {
       status: state.status,
       tick: state.tick,
+      paused: Boolean(game.paused),
       serverTime: Date.now(),
       opponentConnected: Boolean(enemyPlayer && (enemyPlayer.isBot || enemyPlayer.connected)),
       opponentIsBot: Boolean(enemyPlayer && enemyPlayer.isBot),

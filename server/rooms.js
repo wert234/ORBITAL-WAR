@@ -29,6 +29,13 @@ class RoomManager {
     socket.on('room:cancel', () => this.cancelRoom(socket));
     socket.on('room:leave', () => this.leaveRoom(socket));
     socket.on('room:rematch', () => this.requestRematch(socket));
+    socket.on('match:pause', payload => {
+      const session = this.getSession(socket);
+      if (!session) return;
+      const paused = payload?.paused === true;
+      const accepted = this.gameManager.setBotPaused(session.room, session.playerIndex, paused);
+      socket.emit('match:pauseState', { paused: accepted ? paused : false, accepted });
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -202,15 +209,13 @@ class RoomManager {
     const session = this.getSession(socket);
     if (!session) return;
     const { room, playerIndex } = session;
-    if (room.status === 'waiting' || room.status === 'ended' || room.isBotMatch) {
+    if (room.status === 'waiting' || room.status === 'ended') {
       this.closeRoom(room, 'Игрок покинул комнату.');
       return;
     }
-    // Explicitly leaving an active match is a forfeit, unlike an unexpected
-    // network drop which receives the full 30-second reconnect grace period.
-    this.gameManager.finishByForfeit(room, playerIndex);
-    this.clearSocketSession(socket);
-    this.markPlayerDisconnected(room, playerIndex, true);
+    // Explicit surrender ends the match immediately for both human and bot
+    // matches. Keep the socket in its room until the result screen is left.
+    this.gameManager.finishByForfeit(room, playerIndex, 'surrender');
   }
 
   requestRematch(socket) {
