@@ -1,0 +1,8 @@
+ORBITAL WAR — patch: ship sprites, unique ship roles, HUD and arena
+
+Copy these files to the matching paths in the repository root.
+Keep the existing resources/img/fighter.png, bomber.png and interceptor.png files in place.
+Dockerfile now copies resources/ into the container; do not move or duplicate the PNGs.
+After commit, deploy latest commit in Render. Start a NEW match after deployment.
+
+Tests: node --test (5/5 passing).
