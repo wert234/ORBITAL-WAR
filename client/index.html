@@ -81,18 +81,17 @@
 
     <section id="game-screen" class="screen game-screen">
       <header class="game-topbar">
-        <div class="match-state"><span class="status-light live-light"></span><span id="match-status">БОЙ</span></div>
+        <div class="match-state" aria-label="Статус матча"><span class="status-light live-light"></span><span id="match-status" class="sr-only">LIVE</span></div>
         <div class="base-health-block own-health-block">
           <div class="top-metric"><span>НАША</span><strong id="hp-value">1000</strong></div>
           <div class="meter"><span id="hp-fill"></span></div>
         </div>
-        <div class="hp-divider" aria-hidden="true">VS</div>
+        <div class="hp-divider" aria-hidden="true"><span>VS</span></div>
         <div class="base-health-block enemy-health-block">
-          <div class="top-metric"><span id="opponent-label">ВРАГ</span><strong id="opponent-hp-value">1000</strong></div>
+          <div class="top-metric"><span id="opponent-label">СОПЕРНИК</span><strong id="opponent-hp-value">1000</strong></div>
           <div class="meter"><span id="opponent-hp-fill"></span></div>
         </div>
         <div class="energy-block"><span class="energy-icon">✦</span><strong id="energy-value">200</strong><small>ЭНЕРГИЯ</small><em id="generation-value">+5/С</em></div>
-        <div id="level-indicator" class="level-block" aria-label="Уровень базы"><small>УР.</small><strong id="level-value">1</strong></div>
         <button id="pause-button" class="pause-button" aria-label="Пауза" title="Пауза">Ⅱ</button>
       </header>
 
