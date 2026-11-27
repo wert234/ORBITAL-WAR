@@ -548,10 +548,15 @@ export class ArenaRenderer {
 
     const barW = Math.max(18, size * 2.2);
     const ratio = clamp(ship.hp / ship.maxHp, 0, 1);
-    ctx.fillStyle = 'rgba(5, 9, 22, .85)';
-    ctx.fillRect(x - barW / 2, y + size * 1.55, barW, 2.4);
+    // The HP bar is always shown behind the ship (at its engine side).
+    // Friendly ships point upward; enemy ships are rotated by 180 degrees.
+    const hpBarY = y + (friendly ? 1 : -1) * size * 1.72;
+    ctx.fillStyle = 'rgba(5, 9, 22, .88)';
+    roundedRect(ctx, x - barW / 2, hpBarY, barW, 3, 1.5);
+    ctx.fill();
     ctx.fillStyle = friendly ? '#52e4ce' : '#ff759f';
-    ctx.fillRect(x - barW / 2, y + size * 1.55, barW * ratio, 2.4);
+    roundedRect(ctx, x - barW / 2, hpBarY, barW * ratio, 3, 1.5);
+    ctx.fill();
   }
 
   drawProjectiles(ctx, w, h, projectiles) {

@@ -22,6 +22,9 @@ export class GameUI {
     this.hangarModal = document.getElementById('hangar-modal');
     this.upgradeModal = document.getElementById('upgrade-modal');
     this.pauseModal = document.getElementById('pause-modal');
+    // Prevent state snapshots from reopening the bot pause panel after the
+    // player has explicitly dismissed it and the resume request is in flight.
+    this.pauseDismissedUntilUnpaused = false;
     this.bindControls();
     this.populateCatalog();
   }
@@ -149,6 +152,7 @@ export class GameUI {
 
   openPauseMenu() {
     if (!this.state) return;
+    this.pauseDismissedUntilUnpaused = false;
     this.audio.play('click');
     this.closeModuleModal();
     this.closeHangarModal();
@@ -165,20 +169,29 @@ export class GameUI {
     this.audio.play('click');
     const botMatch = Boolean(this.state?.opponentIsBot);
     this.pauseModal.classList.add('hidden');
-    if (botMatch && this.network.isConnected()) this.network.setBotPaused(false);
+    if (botMatch) {
+      // Hide immediately. Ignore any late paused snapshots until the server
+      // confirms that the resume request has taken effect.
+      this.pauseDismissedUntilUnpaused = true;
+      if (this.network.isConnected()) this.network.setBotPaused(false);
+    }
   }
 
   setPaused(paused, accepted = true) {
     if (!this.state?.opponentIsBot) return;
     const description = document.getElementById('pause-description');
     if (!accepted) {
-      description.textContent = 'Сервер не смог поставить матч на паузу. Проверь соединение.';
+      description.textContent = 'Сервер не смог изменить состояние паузы. Проверь соединение.';
       return;
     }
-    description.textContent = paused
-      ? 'ПАУЗА АКТИВНА · производство, корабли и бой остановлены.'
-      : 'Симуляция снова работает. Удачи в бою!';
-    if (paused) this.pauseModal.classList.remove('hidden');
+    if (paused) {
+      description.textContent = 'ПАУЗА АКТИВНА · производство, корабли и бой остановлены.';
+      if (!this.pauseDismissedUntilUnpaused) this.pauseModal.classList.remove('hidden');
+    } else {
+      this.pauseDismissedUntilUnpaused = false;
+      description.textContent = 'Симуляция снова работает. Удачи в бою!';
+      this.pauseModal.classList.add('hidden');
+    }
   }
 
   onMatchEnded() {
@@ -237,9 +250,12 @@ export class GameUI {
     this.state = state;
     this.renderer.setState(state);
     this.updateHud();
-    if (state.opponentIsBot && state.paused) {
+    if (state.opponentIsBot && state.paused && !this.pauseDismissedUntilUnpaused) {
       this.pauseModal.classList.remove('hidden');
       document.getElementById('pause-description').textContent = 'ПАУЗА АКТИВНА · производство, корабли и бой остановлены.';
+    } else if (state.opponentIsBot && !state.paused && this.pauseDismissedUntilUnpaused) {
+      this.pauseDismissedUntilUnpaused = false;
+      this.pauseModal.classList.add('hidden');
     }
   }
 
@@ -287,6 +303,7 @@ export class GameUI {
   }
 
   reset() {
+    this.pauseDismissedUntilUnpaused = false;
     this.state = null;
     this.renderer.setState(null);
     this.closeModuleModal();

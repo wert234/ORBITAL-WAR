@@ -69,6 +69,21 @@ function openResult(payload) {
 }
 
 function wireMenus() {
+  document.querySelectorAll('[data-home-tab]').forEach(button => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.homeTab;
+      audio.play('click');
+      document.querySelectorAll('[data-home-tab]').forEach(item => {
+        const active = item === button;
+        item.classList.toggle('active', active);
+        if (active) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
+      document.querySelectorAll('.home-tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `home-${tab}-panel`);
+      });
+    });
+  });
   document.getElementById('open-network').addEventListener('click', () => { audio.play('click'); showScreen('network-screen'); });
   document.getElementById('open-bot').addEventListener('click', () => {
     audio.play('click');
