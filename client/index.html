@@ -12,21 +12,57 @@
 <body>
   <div class="starfield" aria-hidden="true"></div>
   <main id="app">
-    <section id="home-screen" class="screen active menu-screen">
-      <div class="brand-block">
-        <div class="brand-orbit" aria-hidden="true"><span></span></div>
-        <p class="eyebrow">TACTICAL SPACE FRONTIER</p>
-        <h1>ORBITAL <span>WAR</span></h1>
-        <p class="brand-subtitle">Твоя база. Твой флот. Твоя орбита.</p>
+    <section id="home-screen" class="screen menu-screen home-menu-screen active">
+      <div class="home-topline">
+        <span class="home-kicker"><i></i> COMMAND INTERFACE</span>
+        <button class="home-settings-button" id="open-settings" aria-label="Настройки" title="Настройки">⚙</button>
       </div>
-      <div class="menu-actions">
-        <button class="primary-button" id="open-network">СЕТЕВАЯ ИГРА</button>
-        <button class="secondary-button" id="open-bot">ИГРА С БОТОМ</button>
-        <button class="ghost-button" id="open-settings">НАСТРОЙКИ</button>
-      </div>
-      <div class="menu-footer"><span class="online-dot"></span> REAL-TIME PvP · 2 PLAYERS</div>
-    </section>
 
+      <div class="home-hero">
+        <div class="brand-block">
+          <div class="brand-orbit" aria-hidden="true"><span></span></div>
+          <p class="eyebrow">TACTICAL SPACE FRONTIER</p>
+          <h1>ORBITAL <span>WAR</span></h1>
+          <p class="brand-subtitle">Твоя база. Твой флот. Твоя орбита.</p>
+        </div>
+
+        <div class="home-tab-content">
+          <section class="home-tab-panel" id="home-blueprints-panel" aria-label="Чертежи">
+            <div class="tab-placeholder-icon">⌘</div>
+            <h2>ЧЕРТЕЖИ</h2>
+            <p>Здесь появятся схемы кораблей, модулей и улучшений.</p>
+            <span class="coming-soon">РАЗДЕЛ В РАЗРАБОТКЕ</span>
+          </section>
+
+          <section class="home-tab-panel active" id="home-battle-panel" aria-label="Бой">
+            <p class="eyebrow battle-prompt">ВЫБЕРИ РЕЖИМ СРАЖЕНИЯ</p>
+            <div class="menu-actions battle-mode-actions">
+              <button class="primary-button" id="open-network"><span>СЕТЕВАЯ ИГРА</span><small>Сражение с другим игроком</small></button>
+              <button class="secondary-button" id="open-bot"><span>ИГРА С БОТОМ</span><small>Тренировка и тестирование</small></button>
+            </div>
+          </section>
+
+          <section class="home-tab-panel" id="home-shop-panel" aria-label="Магазин">
+            <div class="tab-placeholder-icon shop-placeholder-icon">✧</div>
+            <h2>МАГАЗИН</h2>
+            <p>Магазин пока пуст. Позже здесь появятся новые предметы.</p>
+            <span class="coming-soon">СКОРО</span>
+          </section>
+        </div>
+      </div>
+
+      <nav class="home-bottom-tabs" aria-label="Главное меню">
+        <button class="home-tab-button" type="button" data-home-tab="blueprints">
+          <span class="home-tab-icon">▤</span><span>ЧЕРТЕЖИ</span>
+        </button>
+        <button class="home-tab-button active" type="button" data-home-tab="battle" aria-current="page">
+          <span class="home-tab-icon">✦</span><span>БОЙ</span>
+        </button>
+        <button class="home-tab-button" type="button" data-home-tab="shop">
+          <span class="home-tab-icon">◇</span><span>МАГАЗИН</span>
+        </button>
+      </nav>
+    </section>
     <section id="network-screen" class="screen menu-screen">
       <div class="subpage-heading">
         <button class="icon-button" id="network-back" aria-label="Назад">←</button>
