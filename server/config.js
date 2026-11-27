@@ -82,7 +82,7 @@ module.exports = Object.freeze({
       shipCooldown: 0.85,
       baseDamage: 24,
       baseCooldown: 1.2,
-      baseAttackRange: 0.095
+      baseAttackRange: 0.24
     },
     bomber: {
       name: 'Бомбардировщик',
